@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+# Pytest
+.cache/
+# mypy
+.mypy_cache/
+# IDEs and editors
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+# OS files
+.DS_Store
+Thumbs.db
+# Logs
+*.log
+# Environment variables
+.env
+.env.*
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+# Vue / frontend
+dist/
+# Audio / temporary
+*.wav
+*.mp3
+*.flac
+# Model files
+Qwen3-ASR-1.7B/*.safetensors
+Qwen3-ASR-1.7B/model.safetensors.index.json
+Qwen3-ASR-1.7B/*.json
+# Model/cache directories
+*.cache/
+*/__pycache__/
+# Git metadata
+*.orig
