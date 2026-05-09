@@ -229,6 +229,16 @@
           </div>
         </div>
       </div>
+
+      <h2 class="subtitle">DashScope 语音合成（<code>/tts</code>）</h2>
+      <div class="panel">
+        <div class="row">
+          <button id="btnTts" class="primary">合成并播放</button>
+        </div>
+        <textarea id="ttsText" class="tts-text" placeholder="输入要合成的文字，点击「合成并播放」…" spellcheck="false"></textarea>
+        <audio id="ttsAudio" class="audio-full" controls playsinline></audio>
+        <div class="small" id="ttsHint"></div>
+      </div>
     </div>
 
     <script>
@@ -254,6 +264,77 @@
 
       backendUrl.textContent = (baseUrl || window.location.origin) + "/transcribe";
       wsUrlEl.textContent = ((baseUrl ? baseUrl.replace(/^http/, "ws") : (location.protocol === "https:" ? "wss://" : "ws://") + location.host) + "/ws/asr");
+
+      const btnTts = $("btnTts");
+      const ttsText = $("ttsText");
+      const ttsAudio = $("ttsAudio");
+      const ttsHint = $("ttsHint");
+      let ttsObjectUrl = null;
+
+      function setTtsHint(msg, isErr = false) {
+        ttsHint.textContent = msg || "";
+        ttsHint.classList.toggle("err", !!isErr);
+      }
+
+      async function runTts() {
+        setTtsHint("");
+        const text = ttsText.value.trim();
+        if (!text) {
+          setTtsHint("请输入要合成的文字", true);
+          return;
+        }
+        btnTts.disabled = true;
+        try {
+          const resp = await fetch((baseUrl || "") + "/tts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+          });
+          const raw = await resp.text();
+          let data;
+          try {
+            data = JSON.parse(raw);
+          } catch {
+            throw new Error(raw.slice(0, 300));
+          }
+          if (!resp.ok) {
+            const detail = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || data);
+            throw new Error(`HTTP ${resp.status}: ${detail}`);
+          }
+          if (data.status_code != null && Number(data.status_code) !== 200) {
+            throw new Error(data.message || data.code || JSON.stringify(data).slice(0, 300));
+          }
+          const audioMeta = data.output && data.output.audio;
+          const wavUrl = audioMeta && audioMeta.url;
+          const b64 = audioMeta && audioMeta.data;
+          if (ttsObjectUrl) {
+            URL.revokeObjectURL(ttsObjectUrl);
+            ttsObjectUrl = null;
+          }
+          ttsAudio.onerror = () =>
+            setTtsHint("音频加载失败（链接跨域、过期或网络问题；可改用响应里的 url 下载试听）", true);
+          if (wavUrl && String(wavUrl).trim()) {
+            ttsAudio.src = String(wavUrl).trim();
+          } else if (b64 && String(b64).trim()) {
+            const bin = atob(String(b64).trim());
+            const u8 = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+            const blob = new Blob([u8], { type: "audio/wav" });
+            ttsObjectUrl = URL.createObjectURL(blob);
+            ttsAudio.src = ttsObjectUrl;
+          } else {
+            throw new Error("响应中无 output.audio.url / output.audio.data");
+          }
+          ttsAudio.load();
+          await ttsAudio.play();
+          setTtsHint("已开始播放（也可用手动控件重播）", false);
+        } catch (e) {
+          setTtsHint(e?.message || String(e), true);
+          ttsAudio.removeAttribute("src");
+        } finally {
+          btnTts.disabled = false;
+        }
+      }
 
       let stream = null;
       let recorder = null;
@@ -532,6 +613,7 @@
         result.value = "";
         setError("");
       });
+      btnTts.addEventListener("click", runTts);
 
       setStatus("未初始化", "idle");
     </script>
