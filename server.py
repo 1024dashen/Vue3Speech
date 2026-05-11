@@ -1,4 +1,7 @@
+import json
 import os
+import shutil
+import subprocess
 import tempfile
 import asyncio
 import wave
@@ -20,6 +23,20 @@ try:
     load_dotenv(_ROOT / ".env")
 except Exception:
     pass
+
+
+def _load_tts_voices_catalog() -> dict:
+    path = _ROOT / "tts_voices_catalog.json"
+    if not path.is_file():
+        return {"version": None, "voices": [], "error": "tts_voices_catalog.json not found"}
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        return {"version": None, "voices": [], "error": str(e)}
+
+
+TTS_VOICES_CATALOG: dict = _load_tts_voices_catalog()
 
 app = FastAPI()
 
@@ -58,6 +75,7 @@ class DashscopeTTSBody(BaseModel):
     """与 ttstest.py 一致：仅 text 由请求传入，其余参数写死为示例脚本中的值。"""
 
     text: str
+    voice: str = "Cherry"  # 新增语音参数，默认 Cherry
 
 
 def _write_wav_pcm16le_mono(wav_path: str, pcm16le: bytes, sample_rate: int = 16000) -> None:
@@ -179,7 +197,7 @@ async def dashscope_tts(body: DashscopeTTSBody):
             model="qwen3-tts-flash",
             api_key=api_key,
             text=body.text,
-            voice="Cherry",
+            voice=body.voice,  # 使用请求中的语音参数
             language_type="Chinese",
             stream=False,
         )
@@ -200,6 +218,72 @@ async def dashscope_tts(body: DashscopeTTSBody):
     return JSONResponse(jsonable_encoder(payload))
 
 
+@app.get("/tts/voices")
+def list_tts_voices():
+    """返回 DashScope Qwen TTS 支持的 voice 参数说明（见阿里云文档），数据来自 tts_voices_catalog.json。"""
+    return jsonable_encoder(TTS_VOICES_CATALOG)
+
+
+# 浏览器 MediaRecorder 常见 webm/opus；Windows 上 libsndfile 不认 webm，audioread 无 FFmpeg 时会 NoBackendError
+_TRANSCODE_VIA_FFMPEG_SUFFIXES = {".webm", ".ogg", ".m4a", ".mp3"}
+
+_ffmpeg_exe_cache: str | None | bool = False  # False = 未解析, None = 无, str = 路径
+
+
+def _resolve_ffmpeg_exe() -> str | None:
+    """IDE 启动的 Python 常拿不到用户 PATH；支持 FFMPEG_PATH，Windows 上再尝试 where.exe。"""
+    global _ffmpeg_exe_cache
+    if _ffmpeg_exe_cache is not False:
+        return _ffmpeg_exe_cache  # type: ignore[return-value]
+
+    for key in ("FFMPEG_PATH", "FFMPEG_BINARY"):
+        raw = os.getenv(key)
+        if not raw:
+            continue
+        raw = raw.strip().strip('"')
+        if os.path.isfile(raw):
+            _ffmpeg_exe_cache = raw
+            return raw
+        if os.path.isfile(raw + ".exe"):
+            _ffmpeg_exe_cache = raw + ".exe"
+            return _ffmpeg_exe_cache
+
+    w = shutil.which("ffmpeg") or shutil.which("ffmpeg.exe")
+    if w:
+        _ffmpeg_exe_cache = w
+        return w
+
+    if os.name == "nt":
+        try:
+            kw: dict = {"capture_output": True, "text": True, "timeout": 15}
+            if hasattr(subprocess, "CREATE_NO_WINDOW"):
+                kw["creationflags"] = subprocess.CREATE_NO_WINDOW
+            r = subprocess.run(["where.exe", "ffmpeg"], **kw)
+            if r.returncode == 0 and r.stdout:
+                first = r.stdout.strip().splitlines()[0].strip()
+                if first and os.path.isfile(first):
+                    _ffmpeg_exe_cache = first
+                    return first
+        except Exception:
+            pass
+
+    _ffmpeg_exe_cache = None
+    return None
+
+
+def _ffmpeg_to_wav(src_path: str, wav_path: str) -> None:
+    exe = _resolve_ffmpeg_exe()
+    if not exe:
+        raise RuntimeError("ffmpeg not found")
+    kw: dict = {"check": True, "capture_output": True, "timeout": 120}
+    if os.name == "nt" and hasattr(subprocess, "CREATE_NO_WINDOW"):
+        kw["creationflags"] = subprocess.CREATE_NO_WINDOW
+    subprocess.run(
+        [exe, "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", src_path, "-ar", "16000", "-ac", "1", wav_path],
+        **kw,
+    )
+
+
 @app.post("/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
     if not file.filename:
@@ -211,6 +295,7 @@ async def transcribe_audio(file: UploadFile = File(...)):
 
     fd, tmp_path = tempfile.mkstemp(suffix=suffix, prefix="qwen_asr_")
     os.close(fd)
+    wav_path: str | None = None
     try:
         content = await file.read()
         if not content:
@@ -219,7 +304,32 @@ async def transcribe_audio(file: UploadFile = File(...)):
         with open(tmp_path, "wb") as f:
             f.write(content)
 
-        results = asr_model.transcribe(audio=tmp_path, language=None)
+        audio_path = tmp_path
+        ffmpeg_exe = _resolve_ffmpeg_exe()
+        if suffix in _TRANSCODE_VIA_FFMPEG_SUFFIXES and ffmpeg_exe:
+            fd_w, wav_path = tempfile.mkstemp(suffix=".wav", prefix="qwen_asr_ff_")
+            os.close(fd_w)
+            try:
+                await asyncio.to_thread(_ffmpeg_to_wav, tmp_path, wav_path)
+            except subprocess.CalledProcessError as e:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"ffmpeg 转码失败: {(e.stderr or e.stdout or b'').decode('utf-8', errors='replace')[:500]}",
+                )
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"ffmpeg 转码失败: {e}")
+            audio_path = wav_path
+        elif suffix in {".webm", ".ogg"}:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "无法解码 webm/ogg：当前 Python 进程找不到 ffmpeg（用 Cursor/IDE 启动时，PATH 常与 PowerShell 不一致）。"
+                    " 请在项目根 .env 增加一行：FFMPEG_PATH=你的 ffmpeg.exe 绝对路径（例如 C:/ffmpeg/bin/ffmpeg.exe）；"
+                    "或把 ffmpeg 加入系统 PATH 后彻底退出 IDE 再打开。下载: https://ffmpeg.org/download.html"
+                ),
+            )
+
+        results = asr_model.transcribe(audio=audio_path, language=None)
         if not results:
             raise HTTPException(status_code=500, detail="Transcription failed")
 
@@ -228,6 +338,8 @@ async def transcribe_audio(file: UploadFile = File(...)):
             "text": results[0].text,
         }
     finally:
+        if wav_path and os.path.exists(wav_path):
+            os.remove(wav_path)
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
 

@@ -234,6 +234,10 @@
       <div class="panel">
         <div class="row">
           <button id="btnTts" class="primary">合成并播放</button>
+          <div class="voice-selector">
+            <label for="ttsVoice">语音：</label>
+            <select id="ttsVoice"></select>
+          </div>
         </div>
         <textarea id="ttsText" class="tts-text" placeholder="输入要合成的文字，点击「合成并播放」…" spellcheck="false"></textarea>
         <audio id="ttsAudio" class="audio-full" controls playsinline></audio>
@@ -265,6 +269,46 @@
       backendUrl.textContent = (baseUrl || window.location.origin) + "/transcribe";
       wsUrlEl.textContent = ((baseUrl ? baseUrl.replace(/^http/, "ws") : (location.protocol === "https:" ? "wss://" : "ws://") + location.host) + "/ws/asr");
 
+      // 获取 TTS 语音列表（GET /tts/voices → { version, voices: [{ voice, name, ... }] }）
+      async function fetchTtsVoicesPayload() {
+        try {
+          const resp = await fetch((baseUrl || "") + "/tts/voices");
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+          return await resp.json();
+        } catch (e) {
+          console.error("获取语音列表失败:", e);
+          return { voices: [{ voice: "Cherry", name: "芊悦" }] };
+        }
+      }
+
+      async function initVoiceSelector() {
+        const ttsVoice = $("ttsVoice");
+        const data = await fetchTtsVoicesPayload();
+        const list = Array.isArray(data.voices) ? data.voices : Array.isArray(data) ? data : [];
+        ttsVoice.innerHTML = "";
+        if (list.length === 0) {
+          const opt = document.createElement("option");
+          opt.value = "Cherry";
+          opt.textContent = "Cherry";
+          opt.selected = true;
+          ttsVoice.appendChild(opt);
+          return;
+        }
+        list.forEach((item) => {
+          const id = typeof item === "string" ? item : item.voice;
+          if (!id) return;
+          const name = typeof item === "string" ? item : item.name || id;
+          const opt = document.createElement("option");
+          opt.value = id;
+          opt.textContent = name === id ? id : `${id}（${name}）`;
+          if (id === "Cherry") opt.selected = true;
+          ttsVoice.appendChild(opt);
+        });
+        if (!ttsVoice.value && ttsVoice.options.length) {
+          ttsVoice.options[0].selected = true;
+        }
+      }
+
       const btnTts = $("btnTts");
       const ttsText = $("ttsText");
       const ttsAudio = $("ttsAudio");
@@ -285,10 +329,11 @@
         }
         btnTts.disabled = true;
         try {
+          const ttsVoice = $("ttsVoice").value; // 获取选择的语音
           const resp = await fetch((baseUrl || "") + "/tts", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text }),
+            body: JSON.stringify({ text, voice: ttsVoice }), // 添加语音参数
           });
           const raw = await resp.text();
           let data;
@@ -616,6 +661,24 @@
       btnTts.addEventListener("click", runTts);
 
       setStatus("未初始化", "idle");
+      initVoiceSelector(); // 初始化语音选择器
     </script>
+    <style>
+      .voice-selector {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+      }
+      #ttsVoice {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 8px;
+        min-width: 100px;
+      }
+      #ttsVoice:focus {
+        outline: none;
+        border-color: var(--accent);
+      }</style>
   </body>
 </html>

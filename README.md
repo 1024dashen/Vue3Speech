@@ -7,7 +7,8 @@
 ```
 Vue3Speech/
 ├── server.py           # FastAPI：ASR、WebSocket、DashScope /tts、/demo、内嵌 uvicorn
-├── demo.html           # 浏览器演示：录音/实时识别、调用 /tts 并自动播放
+├── demo.html                 # 浏览器演示：录音/实时识别、调用 /tts 并自动播放
+├── tts_voices_catalog.json   # DashScope TTS voice 列表（GET /tts/voices 数据源）
 ├── SpeechRecorder.vue  # Vue3 录音组件（可集成到自己的项目）
 ├── ttstest.py          # DashScope TTS 独立脚本（与 /tts 调用方式一致）
 ├── index.py            # 本地 ASR 测试脚本
@@ -21,7 +22,7 @@ Vue3Speech/
 
 - **ASR**：`POST /transcribe` 上传音频（WAV / MP3 / M4A / OGG / WEBM / FLAC）转文字  
 - **实时识别（流式）**：`WebSocket /ws/asr`，浏览器发送 16kHz 单声道 PCM（int16），服务端滑动窗口周期性识别并推送 `partial` 文本  
-- **TTS**：`POST /tts`，请求体仅 `{ "text": "..." }`，与 `ttstest.py` 相同方式调用 DashScope `qwen3-tts-flash`（`Cherry` / `Chinese` / `stream=false`），返回 **JSON**（含 `output.audio.url` 或 `data`）  
+- **TTS**：`POST /tts`，请求体 `{ "text": "...", "voice": "Cherry" }`（`voice` 可选）；`GET /tts/voices` 返回 `tts_voices_catalog.json` 中的音色与适用模型说明  
 - **演示页**：`GET /demo` 提供 `demo.html`（麦克风、实时识别、TTS 合成并自动播放）  
 - **CORS**：默认允许跨域，便于前后端分离开发  
 
@@ -59,6 +60,9 @@ ASR_MODEL_PATH=D:\ShenProject\Vue3Speech\Qwen3-ASR-1.7B
 
 # 可选：预留字段，当前 server 未加载本地 Qwen TTS
 # TTS_MODEL_PATH=D:\path\to\Qwen3-TTS-1.7B
+
+# 可选：webm 转码用。若仅在终端能跑 ffmpeg、IDE 里启动 server 仍报找不到，请写 ffmpeg.exe 绝对路径
+# FFMPEG_PATH=C:/ffmpeg/bin/ffmpeg.exe
 ```
 
 **Uvicorn**（`python server.py` 时）常用变量：
@@ -124,12 +128,21 @@ uvicorn server:app --host 127.0.0.1 --port 8000
 
 说明：当前实现为**滑动窗口 + 周期性整段转写**的「准实时」方案，非模型原生流式解码。
 
+### `GET /tts/voices`
+
+返回 **`tts_voices_catalog.json`** 内容，包含：
+
+- `version`：数据版本标记  
+- `voices`：数组，每项含 `voice`（请求参数）、`name`（音色名）、`description`、`languages`、`supported_models`（按产品线分列具体 `model` id）  
+
+修改音色表时只需编辑该 JSON 并重启服务。
+
 ### `POST /tts`
 
-与 `ttstest.py` 一致调用 DashScope：
+调用 DashScope（默认模型 `qwen3-tts-flash`，与当前 `server.py` 一致）：
 
 - **Content-Type**：`application/json`  
-- **Body**：`{ "text": "要合成的文字" }`  
+- **Body**：`{ "text": "要合成的文字", "voice": "Cherry" }`（`voice` 可选，默认 `Cherry`）  
 - **响应**：`application/json`，结构与 DashScope 返回一致（成功时通常含 `output.audio.url` 指向 wav，或 `output.audio.data` 为 base64）  
 
 `demo.html` 会解析 JSON，优先使用 `url` 播放；仅有 `data` 时本地解码为 Blob 后播放。
@@ -153,7 +166,7 @@ const { text, language } = await r.json()
 const r = await fetch('http://127.0.0.1:8000/tts', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ text: '你好' }),
+  body: JSON.stringify({ text: '你好', voice: 'Vivian' }),
 })
 const data = await r.json()
 const url = data.output?.audio?.url
@@ -188,6 +201,7 @@ FastAPI
 | `check_model_inputs` 与 `transformers` 不兼容 | 锁定与 `qwen-asr` 匹配的 `transformers` 版本（参见官方或社区说明） |
 | `/tts` 报缺少 Key | 检查 `.env` 中 `DASHSCOPE_API_KEY`，并确认与地域一致（默认同脚本：北京 `https://dashscope.aliyuncs.com/api/v1`） |
 | 演示页 TTS 无法播放 | 多为外链 wav 加载限制；可看返回 JSON 中的 `url` 手动下载，或扩展后端代理 |
+| `/transcribe` 上传 **webm** 报 `Format not recognised` / `NoBackendError` / 提示找不到 ffmpeg | 安装 FFmpeg；若 PowerShell 里 `ffmpeg -version` 正常但服务仍报错，在 `.env` 设置 **`FFMPEG_PATH`** 指向 `ffmpeg.exe` 绝对路径（IDE 子进程 PATH 常不含用户 PATH） |
 
 ## 许可证
 
