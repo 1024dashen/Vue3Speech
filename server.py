@@ -8,12 +8,16 @@ import wave
 from pathlib import Path
 
 import torch
-from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.background import BackgroundTask
 from fastapi.middleware.cors import CORSMiddleware
 from qwen_asr import Qwen3ASRModel
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from edge_tts import Communicate, list_voices
+from pydub import AudioSegment
 
 # 与 ttstest.py 一致：先加载 .env，再读环境变量（不依赖当前工作目录）
 _ROOT = Path(__file__).resolve().parent
@@ -76,6 +80,23 @@ class DashscopeTTSBody(BaseModel):
 
     text: str
     voice: str = "Cherry"  # 新增语音参数，默认 Cherry
+
+
+class ZimuSubtitleItem(BaseModel):
+    id: int
+    start_time: int = Field(..., ge=0)
+    end_time: int = Field(..., ge=0)
+    content: str
+
+    def target_duration_ms(self) -> int:
+        return self.end_time - self.start_time
+
+
+class EdgeSubtitleVoiceoverBody(BaseModel):
+    """与 subtitles.json 中 subtitles 数组项结构一致，按时间轴对齐 Edge-TTS 配音。"""
+
+    voice: str = "zh-CN-YunxiNeural"
+    subtitles: list[ZimuSubtitleItem] = Field(..., min_length=1)
 
 
 def _write_wav_pcm16le_mono(wav_path: str, pcm16le: bytes, sample_rate: int = 16000) -> None:
@@ -224,6 +245,74 @@ def list_tts_voices():
     return jsonable_encoder(TTS_VOICES_CATALOG)
 
 
+@app.get("/tts/edge-voices")
+async def list_edge_tts_voices(
+    locale: str | None = Query(
+        default=None,
+        description="可选：按区域过滤，不区分大小写；匹配 Locale 或 ShortName 子串（如 zh-CN、en-US）",
+    ),
+    gender: str | None = Query(
+        default=None,
+        description="可选：Female 或 Male",
+    ),
+):
+    """
+    查询 Microsoft Edge TTS 当前可用的声音列表（与 edge-tts 库一致，实时请求微软接口）。
+    合成时请使用每条里的 **ShortName**（如 zh-CN-YunxiNeural），与 `/tts/edge-subtitle-voiceover` 的 `voice` 字段对应。
+    """
+    if gender is not None:
+        g = gender.strip().capitalize()
+        if g not in ("Female", "Male"):
+            raise HTTPException(status_code=400, detail="gender 只能是 Female 或 Male")
+        gender_norm = g
+    else:
+        gender_norm = None
+
+    try:
+        voices = await list_voices()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"拉取 Edge TTS 语音列表失败: {e}") from e
+
+    if locale and locale.strip():
+        lp = locale.strip().lower()
+
+        def _match_loc(v: dict) -> bool:
+            loc = (v.get("Locale") or "").lower()
+            short = (v.get("ShortName") or "").lower()
+            return lp in loc or loc.startswith(lp) or lp in short
+
+        voices = [v for v in voices if _match_loc(v)]
+
+    if gender_norm is not None:
+        voices = [v for v in voices if v.get("Gender") == gender_norm]
+
+    return jsonable_encoder({"count": len(voices), "voices": voices})
+
+
+@app.post("/tts/edge-subtitle-voiceover")
+async def edge_subtitle_voiceover(body: EdgeSubtitleVoiceoverBody):
+    """
+    按字幕时间轴生成 Edge-TTS 配音：每句对齐 start/end，句间按下一帧 start 插入静音；
+    变速使用 FFmpeg atempo，尽量保持音高（需 ffmpeg）。
+    返回 MP3 文件。
+    """
+    try:
+        out_path = await _build_edge_subtitle_voiceover_mp3(body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    return FileResponse(
+        out_path,
+        media_type="audio/mpeg",
+        filename="subtitle_voiceover.mp3",
+        background=BackgroundTask(_zimu_cleanup_paths, [out_path]),
+    )
+
+
 # 浏览器 MediaRecorder 常见 webm/opus；Windows 上 libsndfile 不认 webm，audioread 无 FFmpeg 时会 NoBackendError
 _TRANSCODE_VIA_FFMPEG_SUFFIXES = {".webm", ".ogg", ".m4a", ".mp3"}
 
@@ -282,6 +371,115 @@ def _ffmpeg_to_wav(src_path: str, wav_path: str) -> None:
         [exe, "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", src_path, "-ar", "16000", "-ac", "1", wav_path],
         **kw,
     )
+
+
+def _zimu_calculate_speed_factor(original_duration_ms: int, target_duration_ms: int) -> float:
+    if original_duration_ms <= 0:
+        return 1.0
+    factor = target_duration_ms / original_duration_ms
+    return max(0.5, min(2.0, factor))
+
+
+def _zimu_build_atempo_filter(tempo: float) -> str:
+    parts: list[str] = []
+    t = tempo
+    while t > 2.0 + 1e-6:
+        parts.append("atempo=2.0")
+        t /= 2.0
+    while t < 0.5 - 1e-6:
+        parts.append("atempo=0.5")
+        t /= 0.5
+    parts.append(f"atempo={t:.6f}")
+    return ",".join(parts)
+
+
+def _zimu_time_stretch_atempo(aud: AudioSegment, speed_factor: float) -> AudioSegment:
+    """speed_factor = target_ms / original_ms；使用 FFmpeg atempo 尽量保持音高。"""
+    exe = _resolve_ffmpeg_exe()
+    if not exe:
+        raise RuntimeError("ffmpeg not found (设置 FFMPEG_PATH 或将 ffmpeg 加入 PATH)")
+    tempo = 1.0 / speed_factor
+    filter_a = _zimu_build_atempo_filter(tempo)
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as fin:
+        in_path = fin.name
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as fout:
+        out_path = fout.name
+    kw: dict = {"capture_output": True, "text": True}
+    if os.name == "nt" and hasattr(subprocess, "CREATE_NO_WINDOW"):
+        kw["creationflags"] = subprocess.CREATE_NO_WINDOW
+    try:
+        aud.export(in_path, format="wav")
+        r = subprocess.run(
+            [exe, "-y", "-hide_banner", "-loglevel", "error", "-i", in_path, "-filter:a", filter_a, out_path],
+            **kw,
+        )
+        if r.returncode != 0:
+            raise RuntimeError((r.stderr or r.stdout or "").strip() or "ffmpeg atempo failed")
+        return AudioSegment.from_wav(out_path)
+    finally:
+        for p in (in_path, out_path):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+
+
+async def _zimu_save_edge_tts(text: str, voice: str, output_path: str) -> None:
+    communicate = Communicate(text, voice)
+    await communicate.save(output_path)
+
+
+def _zimu_cleanup_paths(paths: list[str]) -> None:
+    for p in paths:
+        if not p:
+            continue
+        try:
+            if os.path.isdir(p):
+                shutil.rmtree(p, ignore_errors=True)
+            elif os.path.isfile(p):
+                os.unlink(p)
+        except OSError:
+            pass
+
+
+async def _build_edge_subtitle_voiceover_mp3(body: EdgeSubtitleVoiceoverBody) -> str:
+    """生成临时 MP3 路径；调用方负责在响应结束后删除。"""
+    for sub in body.subtitles:
+        if sub.end_time <= sub.start_time:
+            raise ValueError(f"字幕 id={sub.id}: end_time 必须大于 start_time")
+        if not (sub.content or "").strip():
+            raise ValueError(f"字幕 id={sub.id}: content 不能为空")
+
+    temp_dir = tempfile.mkdtemp(prefix="zimu_clips_", dir=str(_ROOT))
+    out_fd, out_path = tempfile.mkstemp(suffix=".mp3", prefix="zimu_voiceover_", dir=str(_ROOT))
+    os.close(out_fd)
+    try:
+        final_audio = AudioSegment.empty()
+        subs = body.subtitles
+        for i, sub in enumerate(subs):
+            text = sub.content.strip()
+            target_duration_ms = sub.target_duration_ms()
+            temp_path = os.path.join(temp_dir, f"clip_{sub.id}_raw.mp3")
+            await _zimu_save_edge_tts(text, body.voice, temp_path)
+            raw_audio = AudioSegment.from_mp3(temp_path)
+            original_duration_ms = len(raw_audio)
+            speed_factor = _zimu_calculate_speed_factor(original_duration_ms, target_duration_ms)
+            if abs(speed_factor - 1.0) > 0.01:
+                adjusted_audio = await asyncio.to_thread(_zimu_time_stretch_atempo, raw_audio, speed_factor)
+            else:
+                adjusted_audio = raw_audio
+            final_audio += adjusted_audio
+            if i + 1 < len(subs):
+                next_start = subs[i + 1].start_time
+                gap_ms = next_start - sub.end_time
+                if gap_ms > 0:
+                    final_audio += AudioSegment.silent(duration=gap_ms)
+        await asyncio.to_thread(final_audio.export, out_path, format="mp3")
+    except Exception:
+        _zimu_cleanup_paths([temp_dir, out_path])
+        raise
+    _zimu_cleanup_paths([temp_dir])
+    return out_path
 
 
 @app.post("/transcribe")
