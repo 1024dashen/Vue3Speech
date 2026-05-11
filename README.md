@@ -69,7 +69,7 @@ ASR_MODEL_PATH=D:\ShenProject\Vue3Speech\Qwen3-ASR-1.7B
 
 | 变量 | 说明 |
 |------|------|
-| `UVICORN_HOST` / `HOST` | 默认 `127.0.0.1` |
+| `UVICORN_HOST` / `HOST` | 默认 `0.0.0.0`（局域网可访问）；仅本机访问可设为 `127.0.0.1` |
 | `UVICORN_PORT` / `PORT` | 默认 `8000` |
 | `UVICORN_RELOAD` | `1` / `true` 开启热重载 |
 | `UVICORN_LOG_LEVEL` | 默认 `info` |
@@ -87,15 +87,14 @@ ASR_MODEL_PATH=D:\ShenProject\Vue3Speech\Qwen3-ASR-1.7B
 python server.py
 ```
 
-浏览器打开：
+本机浏览器：`http://127.0.0.1:8000/` 或 `http://localhost:8000/`；**同一局域网内其它设备**用 `http://<这台电脑的局域网IP>:8000/`（例如 `http://192.168.1.100:8000/demo`）。在 Windows 可用 `ipconfig` 查看 IPv4 地址。
 
-- 接口根：`http://127.0.0.1:8000/`  
-- **演示页**：`http://127.0.0.1:8000/demo`  
+- **演示页**：`/demo`  
 
 亦可用：
 
 ```bash
-uvicorn server:app --host 127.0.0.1 --port 8000
+uvicorn server:app --host 0.0.0.0 --port 8000
 ```
 
 ## API 说明

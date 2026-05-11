@@ -354,7 +354,8 @@ def _env_bool(name: str, default: bool = False) -> bool:
 if __name__ == "__main__":
     import uvicorn
 
-    host = os.getenv("UVICORN_HOST", os.getenv("HOST", "127.0.0.1"))
+    # 0.0.0.0：本机所有网卡，局域网内可用 http://<本机IP>:端口 访问；仅本机可设 UVICORN_HOST=127.0.0.1
+    host = os.getenv("UVICORN_HOST", os.getenv("HOST", "0.0.0.0"))
     port = int(os.getenv("UVICORN_PORT", os.getenv("PORT", "8000")))
     log_level = os.getenv("UVICORN_LOG_LEVEL", "info")
     reload_ = _env_bool("UVICORN_RELOAD", default=False)
