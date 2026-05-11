@@ -1,14 +1,16 @@
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
 import asyncio
+import uuid
 import wave
 from pathlib import Path
 
 import torch
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.background import BackgroundTask
@@ -21,12 +23,23 @@ from pydub import AudioSegment
 
 # 与 ttstest.py 一致：先加载 .env，再读环境变量（不依赖当前工作目录）
 _ROOT = Path(__file__).resolve().parent
+_EDGE_VOICEOVER_CACHE = _ROOT / "edge_voiceover_cache"
+_EDGE_VOICEOVER_CACHE.mkdir(exist_ok=True)
+_EDGE_VOICEOVER_FILE_RE = re.compile(r"^[a-f0-9]{32}\.mp3$")
 try:
     from dotenv import load_dotenv  # type: ignore
 
     load_dotenv(_ROOT / ".env")
 except Exception:
     pass
+
+
+def _public_base_url(request: Request) -> str:
+    """优先使用环境变量 PUBLIC_BASE_URL（反向代理/公网域名），否则用请求的 base URL。"""
+    raw = (os.getenv("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+    if raw:
+        return raw
+    return str(request.base_url).rstrip("/")
 
 
 def _load_tts_voices_catalog() -> dict:
@@ -313,6 +326,45 @@ async def edge_subtitle_voiceover(body: EdgeSubtitleVoiceoverBody):
     )
 
 
+@app.post("/tts/edge-subtitle-voiceover/link")
+async def edge_subtitle_voiceover_link(body: EdgeSubtitleVoiceoverBody, request: Request):
+    """
+    与 `/tts/edge-subtitle-voiceover` 相同合成逻辑，但将 MP3 保存到服务端缓存目录，
+    返回可直接在浏览器或播放器中打开的 **url** 与 **path**（同机相对路径）。
+    音频通过 `GET /tts/edge-voiceover-files/{file_id}` 提供；文件长期保留在 `edge_voiceover_cache/`，请自行清理或后续加过期策略。
+    若在反向代理后部署，请在 .env 设置 `PUBLIC_BASE_URL=https://你的域名` 以便返回正确的绝对链接。
+    """
+    file_id = f"{uuid.uuid4().hex}.mp3"
+    dest = str((_EDGE_VOICEOVER_CACHE / file_id).resolve())
+    try:
+        await _build_edge_subtitle_voiceover_mp3(body, output_mp3_path=dest)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    rel = f"/tts/edge-voiceover-files/{file_id}"
+    base = _public_base_url(request)
+    return jsonable_encoder({"path": rel, "url": f"{base}{rel}", "file_id": file_id})
+
+
+@app.get("/tts/edge-voiceover-files/{file_id}")
+def get_edge_voiceover_file(file_id: str):
+    """获取由 `/tts/edge-subtitle-voiceover/link` 生成的 MP3（可直接在地址栏或 `<audio src>` 中使用）。"""
+    if not _EDGE_VOICEOVER_FILE_RE.match(file_id):
+        raise HTTPException(status_code=404, detail="Not found")
+    path = (_EDGE_VOICEOVER_CACHE / file_id).resolve()
+    try:
+        path.relative_to(_EDGE_VOICEOVER_CACHE.resolve())
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Not found")
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Not found")
+    return FileResponse(path, media_type="audio/mpeg", filename=file_id)
+
+
 # 浏览器 MediaRecorder 常见 webm/opus；Windows 上 libsndfile 不认 webm，audioread 无 FFmpeg 时会 NoBackendError
 _TRANSCODE_VIA_FFMPEG_SUFFIXES = {".webm", ".ogg", ".m4a", ".mp3"}
 
@@ -442,8 +494,14 @@ def _zimu_cleanup_paths(paths: list[str]) -> None:
             pass
 
 
-async def _build_edge_subtitle_voiceover_mp3(body: EdgeSubtitleVoiceoverBody) -> str:
-    """生成临时 MP3 路径；调用方负责在响应结束后删除。"""
+async def _build_edge_subtitle_voiceover_mp3(
+    body: EdgeSubtitleVoiceoverBody,
+    output_mp3_path: str | None = None,
+) -> str:
+    """
+    生成 MP3。默认写到临时文件，由调用方删除；若传入 output_mp3_path 则直接导出到该路径
+    （避免 Windows 上先写临时文件再 shutil.move 时文件仍被占用导致失败）。
+    """
     for sub in body.subtitles:
         if sub.end_time <= sub.start_time:
             raise ValueError(f"字幕 id={sub.id}: end_time 必须大于 start_time")
@@ -451,8 +509,11 @@ async def _build_edge_subtitle_voiceover_mp3(body: EdgeSubtitleVoiceoverBody) ->
             raise ValueError(f"字幕 id={sub.id}: content 不能为空")
 
     temp_dir = tempfile.mkdtemp(prefix="zimu_clips_", dir=str(_ROOT))
-    out_fd, out_path = tempfile.mkstemp(suffix=".mp3", prefix="zimu_voiceover_", dir=str(_ROOT))
-    os.close(out_fd)
+    if output_mp3_path is not None:
+        out_path = output_mp3_path
+    else:
+        out_fd, out_path = tempfile.mkstemp(suffix=".mp3", prefix="zimu_voiceover_", dir=str(_ROOT))
+        os.close(out_fd)
     try:
         final_audio = AudioSegment.empty()
         subs = body.subtitles
@@ -476,7 +537,12 @@ async def _build_edge_subtitle_voiceover_mp3(body: EdgeSubtitleVoiceoverBody) ->
                     final_audio += AudioSegment.silent(duration=gap_ms)
         await asyncio.to_thread(final_audio.export, out_path, format="mp3")
     except Exception:
-        _zimu_cleanup_paths([temp_dir, out_path])
+        _zimu_cleanup_paths([temp_dir])
+        if os.path.isfile(out_path):
+            try:
+                os.unlink(out_path)
+            except OSError:
+                pass
         raise
     _zimu_cleanup_paths([temp_dir])
     return out_path
