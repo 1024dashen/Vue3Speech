@@ -1,0 +1,167 @@
+{
+    "type": "object",
+    "title": "HADO赛事视频识别响应数据",
+    "description": "HADO AI视频分析输出的动作、得分、KO事件统一数据结构",
+    "required": [
+      "action",
+      "created_at_ms",
+      "event_type",
+      "frame_index",
+      "frame_number",
+      "ko",
+      "player",
+      "score",
+      "time",
+      "time_seconds"
+    ],
+    "properties": {
+      "action": {
+        "$ref": "#/definitions/Action",
+        "description": "事件参数：event_type为得分时存储得分参数，为action时存储动作参数"
+      },
+      "created_at_ms": {
+        "type": "number",
+        "description": "生成系统时间戳，毫秒"
+      },
+      "event_type": {
+        "type": "string",
+        "enum": ["action", "score"],
+        "description": "事件类别：action=运动，score=得分"
+      },
+      "frame_index": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "视频帧下标，从0开始"
+      },
+      "frame_number": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "视频帧编号，从1开始"
+      },
+      "ko": {
+        "$ref": "#/definitions/Ko",
+        "description": "KO事件信息"
+      },
+      "player": {
+        "$ref": "#/definitions/Player",
+        "description": "红蓝方选手/阵营数据"
+      },
+      "score": {
+        "$ref": "#/definitions/Score",
+        "description": "得分数据"
+      },
+      "time": {
+        "type": "string",
+        "pattern": "^\\d{2}:\\d{2}\\.\\d{3}$",
+        "description": "视频内时间，格式：mm:ss.mmm"
+      },
+      "time_seconds": {
+        "type": "number",
+        "description": "事件发生在视频内的秒数"
+      }
+    },
+    "additionalProperties": true,
+    "definitions": {
+      "Action": {
+        "type": "object",
+        "required": ["confidence", "ke", "label", "type"],
+        "properties": {
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "识别置信度"
+          },
+          "ke": {
+            "type": "null",
+            "description": "预留字段"
+          },
+          "label": {
+            "type": "string",
+            "description": "动作标签"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "raise_hand",
+              "squat",
+              "raise_hand+squat",
+              "score"
+            ],
+            "description": "动作类型：抬手/下蹲/抬手+下蹲/得分"
+          }
+        },
+        "additionalProperties": true
+      },
+      "Ko": {
+        "type": "object",
+        "required": ["confidence", "team", "team_label", "trigger"],
+        "properties": {
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "KO图标检测置信度"
+          },
+          "team": {
+            "type": "string",
+            "description": "被KO方（英文标识）"
+          },
+          "team_label": {
+            "type": "string",
+            "description": "被KO方（中文：红方/蓝方）"
+          },
+          "trigger": {
+            "type": "string",
+            "description": "KO触发类型"
+          }
+        },
+        "additionalProperties": true
+      },
+      "Player": {
+        "type": "object",
+        "required": ["bbox", "team", "team_label", "track_id", "username"],
+        "properties": {
+          "bbox": {
+            "type": "array",
+            "items": { "type": "number" },
+            "minItems": 4,
+            "maxItems": 4,
+            "description": "人体坐标框 [x1,y1,x2,y2]"
+          },
+          "team": {
+            "type": "string",
+            "description": "阵营标识"
+          },
+          "team_label": {
+            "type": "string",
+            "description": "阵营中文：红方/蓝方"
+          },
+          "track_id": {
+            "type": "null",
+            "description": "追踪ID预留"
+          },
+          "username": {
+            "type": "string",
+            "description": "阵营区分字段：红方/蓝方"
+          }
+        },
+        "additionalProperties": true
+      },
+      "Score": {
+        "type": "object",
+        "required": ["team", "team_label"],
+        "properties": {
+          "team": {
+            "type": "string",
+            "description": "得分方标识"
+          },
+          "team_label": {
+            "type": "string",
+            "description": "得分方中文：红方/蓝方"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  }

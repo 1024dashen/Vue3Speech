@@ -1,0 +1,1032 @@
+[
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2247-blue_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2247,
+    "frame_number": 2248,
+    "time_seconds": 93.625,
+    "time": "01:33.625",
+    "player": {
+      "username": "blue_team",
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "track_id": null,
+      "bbox": [
+        470,
+        456,
+        526,
+        512
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.875,
+      "ke": null
+    },
+    "created_at_ms": 1778574048177,
+    "score": {
+      "team": "blue_team",
+      "team_label": "蓝方"
+    },
+    "ko": {
+      "team": "red_team",
+      "team_label": "红方",
+      "trigger": "K.O.",
+      "confidence": 0.875
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2247-blue_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2247,
+    "frame_number": 2248,
+    "time_seconds": 93.625,
+    "time": "01:33.625",
+    "player": {
+      "username": "blue_team",
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "track_id": null,
+      "bbox": [
+        536,
+        368,
+        584,
+        414
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.811,
+      "ke": null
+    },
+    "created_at_ms": 1778574048177,
+    "score": {
+      "team": "blue_team",
+      "team_label": "蓝方"
+    },
+    "ko": {
+      "team": "red_team",
+      "team_label": "红方",
+      "trigger": "K.O.",
+      "confidence": 0.811
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2247-blue_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2247,
+    "frame_number": 2248,
+    "time_seconds": 93.625,
+    "time": "01:33.625",
+    "player": {
+      "username": "blue_team",
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "track_id": null,
+      "bbox": [
+        536,
+        274,
+        584,
+        322
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.812,
+      "ke": null
+    },
+    "created_at_ms": 1778574048177,
+    "score": {
+      "team": "blue_team",
+      "team_label": "蓝方"
+    },
+    "ko": {
+      "team": "red_team",
+      "team_label": "红方",
+      "trigger": "K.O.",
+      "confidence": 0.812
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2247-blue_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2247,
+    "frame_number": 2248,
+    "time_seconds": 93.625,
+    "time": "01:33.625",
+    "player": {
+      "username": "blue_team",
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "track_id": null,
+      "bbox": [
+        470,
+        270,
+        526,
+        326
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.813,
+      "ke": null
+    },
+    "created_at_ms": 1778574048177,
+    "score": {
+      "team": "blue_team",
+      "team_label": "蓝方"
+    },
+    "ko": {
+      "team": "red_team",
+      "team_label": "红方",
+      "trigger": "K.O.",
+      "confidence": 0.813
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2248-blue_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2248,
+    "frame_number": 2249,
+    "time_seconds": 93.667,
+    "time": "01:33.667",
+    "player": {
+      "username": "blue_team",
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "track_id": null,
+      "bbox": [
+        320,
+        548,
+        376,
+        606
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.808,
+      "ke": null
+    },
+    "created_at_ms": 1778574048466,
+    "score": {
+      "team": "blue_team",
+      "team_label": "蓝方"
+    },
+    "ko": {
+      "team": "red_team",
+      "team_label": "红方",
+      "trigger": "K.O.",
+      "confidence": 0.808
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2248-blue_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2248,
+    "frame_number": 2249,
+    "time_seconds": 93.667,
+    "time": "01:33.667",
+    "player": {
+      "username": "blue_team",
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "track_id": null,
+      "bbox": [
+        320,
+        270,
+        376,
+        326
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.798,
+      "ke": null
+    },
+    "created_at_ms": 1778574048466,
+    "score": {
+      "team": "blue_team",
+      "team_label": "蓝方"
+    },
+    "ko": {
+      "team": "red_team",
+      "team_label": "红方",
+      "trigger": "K.O.",
+      "confidence": 0.798
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-action-2250-red_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "action",
+    "frame_index": 2250,
+    "frame_number": 2251,
+    "time_seconds": 93.75,
+    "time": "01:33.750",
+    "player": {
+      "username": "red_team",
+      "team": "red_team",
+      "team_label": "红方",
+      "track_id": 684,
+      "bbox": [
+        270,
+        609,
+        370,
+        713
+      ]
+    },
+    "action": {
+      "type": "squat",
+      "label": "下蹲",
+      "confidence": 0.92,
+      "ke": 35.562,
+      "confidence_detail": {
+        "action": 0.92,
+        "person": 0.553,
+        "keypoints": 0.719
+      }
+    },
+    "created_at_ms": 1778574048915
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2250-blue_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2250,
+    "frame_number": 2251,
+    "time_seconds": 93.75,
+    "time": "01:33.750",
+    "player": {
+      "username": "blue_team",
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "track_id": null,
+      "bbox": [
+        48,
+        366,
+        100,
+        414
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.72,
+      "ke": null
+    },
+    "created_at_ms": 1778574049047,
+    "score": {
+      "team": "blue_team",
+      "team_label": "蓝方"
+    },
+    "ko": {
+      "team": "red_team",
+      "team_label": "红方",
+      "trigger": "K.O.",
+      "confidence": 0.72
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-action-2252-blue_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "action",
+    "frame_index": 2252,
+    "frame_number": 2253,
+    "time_seconds": 93.833,
+    "time": "01:33.833",
+    "player": {
+      "username": "blue_team",
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "track_id": 691,
+      "bbox": [
+        1498,
+        639,
+        1654,
+        947
+      ]
+    },
+    "action": {
+      "type": "squat",
+      "label": "下蹲",
+      "confidence": 0.985,
+      "ke": 2.272,
+      "confidence_detail": {
+        "action": 0.985,
+        "person": 0.905,
+        "keypoints": 0.742
+      }
+    },
+    "created_at_ms": 1778574049485
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2265-red_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2265,
+    "frame_number": 2266,
+    "time_seconds": 94.375,
+    "time": "01:34.375",
+    "player": {
+      "username": "red_team",
+      "team": "red_team",
+      "team_label": "红方",
+      "track_id": null,
+      "bbox": [
+        1448,
+        306,
+        1514,
+        374
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.871,
+      "ke": null
+    },
+    "created_at_ms": 1778574051955,
+    "score": {
+      "team": "red_team",
+      "team_label": "红方"
+    },
+    "ko": {
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "trigger": "K.O.",
+      "confidence": 0.871
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2267-red_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2267,
+    "frame_number": 2268,
+    "time_seconds": 94.458,
+    "time": "01:34.458",
+    "player": {
+      "username": "red_team",
+      "team": "red_team",
+      "team_label": "红方",
+      "track_id": null,
+      "bbox": [
+        1166,
+        476,
+        1212,
+        524
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.811,
+      "ke": null
+    },
+    "created_at_ms": 1778574052469,
+    "score": {
+      "team": "red_team",
+      "team_label": "红方"
+    },
+    "ko": {
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "trigger": "K.O.",
+      "confidence": 0.811
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2267-red_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2267,
+    "frame_number": 2268,
+    "time_seconds": 94.458,
+    "time": "01:34.458",
+    "player": {
+      "username": "red_team",
+      "team": "red_team",
+      "team_label": "红方",
+      "track_id": null,
+      "bbox": [
+        1090,
+        466,
+        1156,
+        533
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.901,
+      "ke": null
+    },
+    "created_at_ms": 1778574052469,
+    "score": {
+      "team": "red_team",
+      "team_label": "红方"
+    },
+    "ko": {
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "trigger": "K.O.",
+      "confidence": 0.901
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2267-red_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2267,
+    "frame_number": 2268,
+    "time_seconds": 94.458,
+    "time": "01:34.458",
+    "player": {
+      "username": "red_team",
+      "team": "red_team",
+      "team_label": "红方",
+      "track_id": null,
+      "bbox": [
+        1166,
+        396,
+        1212,
+        444
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.811,
+      "ke": null
+    },
+    "created_at_ms": 1778574052469,
+    "score": {
+      "team": "red_team",
+      "team_label": "红方"
+    },
+    "ko": {
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "trigger": "K.O.",
+      "confidence": 0.811
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2267-red_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2267,
+    "frame_number": 2268,
+    "time_seconds": 94.458,
+    "time": "01:34.458",
+    "player": {
+      "username": "red_team",
+      "team": "red_team",
+      "team_label": "红方",
+      "track_id": null,
+      "bbox": [
+        1090,
+        306,
+        1156,
+        374
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.888,
+      "ke": null
+    },
+    "created_at_ms": 1778574052469,
+    "score": {
+      "team": "red_team",
+      "team_label": "红方"
+    },
+    "ko": {
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "trigger": "K.O.",
+      "confidence": 0.888
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2268-blue_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2268,
+    "frame_number": 2269,
+    "time_seconds": 94.5,
+    "time": "01:34.500",
+    "player": {
+      "username": "blue_team",
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "track_id": null,
+      "bbox": [
+        914,
+        466,
+        981,
+        534
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.844,
+      "ke": null
+    },
+    "created_at_ms": 1778574052710,
+    "score": {
+      "team": "blue_team",
+      "team_label": "蓝方"
+    },
+    "ko": {
+      "team": "red_team",
+      "team_label": "红方",
+      "trigger": "K.O.",
+      "confidence": 0.844
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2268-red_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2268,
+    "frame_number": 2269,
+    "time_seconds": 94.5,
+    "time": "01:34.500",
+    "player": {
+      "username": "red_team",
+      "team": "red_team",
+      "team_label": "红方",
+      "track_id": null,
+      "bbox": [
+        990,
+        396,
+        1036,
+        444
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.811,
+      "ke": null
+    },
+    "created_at_ms": 1778574052710,
+    "score": {
+      "team": "red_team",
+      "team_label": "红方"
+    },
+    "ko": {
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "trigger": "K.O.",
+      "confidence": 0.811
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2270-blue_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2270,
+    "frame_number": 2271,
+    "time_seconds": 94.583,
+    "time": "01:34.583",
+    "player": {
+      "username": "blue_team",
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "track_id": null,
+      "bbox": [
+        684,
+        476,
+        732,
+        524
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.819,
+      "ke": null
+    },
+    "created_at_ms": 1778574053168,
+    "score": {
+      "team": "blue_team",
+      "team_label": "蓝方"
+    },
+    "ko": {
+      "team": "red_team",
+      "team_label": "红方",
+      "trigger": "K.O.",
+      "confidence": 0.819
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2270-blue_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2270,
+    "frame_number": 2271,
+    "time_seconds": 94.583,
+    "time": "01:34.583",
+    "player": {
+      "username": "blue_team",
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "track_id": null,
+      "bbox": [
+        608,
+        466,
+        676,
+        533
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.847,
+      "ke": null
+    },
+    "created_at_ms": 1778574053168,
+    "score": {
+      "team": "blue_team",
+      "team_label": "蓝方"
+    },
+    "ko": {
+      "team": "red_team",
+      "team_label": "红方",
+      "trigger": "K.O.",
+      "confidence": 0.847
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2270-blue_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2270,
+    "frame_number": 2271,
+    "time_seconds": 94.583,
+    "time": "01:34.583",
+    "player": {
+      "username": "blue_team",
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "track_id": null,
+      "bbox": [
+        608,
+        306,
+        676,
+        374
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.823,
+      "ke": null
+    },
+    "created_at_ms": 1778574053168,
+    "score": {
+      "team": "blue_team",
+      "team_label": "蓝方"
+    },
+    "ko": {
+      "team": "red_team",
+      "team_label": "红方",
+      "trigger": "K.O.",
+      "confidence": 0.823
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2273-blue_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2273,
+    "frame_number": 2274,
+    "time_seconds": 94.708,
+    "time": "01:34.708",
+    "player": {
+      "username": "blue_team",
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "track_id": null,
+      "bbox": [
+        406,
+        476,
+        454,
+        530
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.739,
+      "ke": null
+    },
+    "created_at_ms": 1778574053791,
+    "score": {
+      "team": "blue_team",
+      "team_label": "蓝方"
+    },
+    "ko": {
+      "team": "red_team",
+      "team_label": "红方",
+      "trigger": "K.O.",
+      "confidence": 0.739
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2273-blue_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2273,
+    "frame_number": 2274,
+    "time_seconds": 94.708,
+    "time": "01:34.708",
+    "player": {
+      "username": "blue_team",
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "track_id": null,
+      "bbox": [
+        332,
+        466,
+        398,
+        534
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.848,
+      "ke": null
+    },
+    "created_at_ms": 1778574053792,
+    "score": {
+      "team": "blue_team",
+      "team_label": "蓝方"
+    },
+    "ko": {
+      "team": "red_team",
+      "team_label": "红方",
+      "trigger": "K.O.",
+      "confidence": 0.848
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2273-blue_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2273,
+    "frame_number": 2274,
+    "time_seconds": 94.708,
+    "time": "01:34.708",
+    "player": {
+      "username": "blue_team",
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "track_id": null,
+      "bbox": [
+        407,
+        396,
+        454,
+        444
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.817,
+      "ke": null
+    },
+    "created_at_ms": 1778574053792,
+    "score": {
+      "team": "blue_team",
+      "team_label": "蓝方"
+    },
+    "ko": {
+      "team": "red_team",
+      "team_label": "红方",
+      "trigger": "K.O.",
+      "confidence": 0.817
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-action-2298-red_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "action",
+    "frame_index": 2298,
+    "frame_number": 2299,
+    "time_seconds": 95.75,
+    "time": "01:35.750",
+    "player": {
+      "username": "red_team",
+      "team": "red_team",
+      "team_label": "红方",
+      "track_id": 711,
+      "bbox": [
+        551,
+        721,
+        737,
+        1079
+      ]
+    },
+    "action": {
+      "type": "squat",
+      "label": "下蹲",
+      "confidence": 0.976,
+      "ke": 36.583,
+      "confidence_detail": {
+        "action": 0.976,
+        "person": 0.847,
+        "keypoints": 0.693
+      }
+    },
+    "created_at_ms": 1778574058158
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-action-2300-blue_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "action",
+    "frame_index": 2300,
+    "frame_number": 2301,
+    "time_seconds": 95.833,
+    "time": "01:35.833",
+    "player": {
+      "username": "blue_team",
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "track_id": 691,
+      "bbox": [
+        1717,
+        639,
+        1917,
+        1058
+      ]
+    },
+    "action": {
+      "type": "raise_hand",
+      "label": "抬手",
+      "confidence": 0.745,
+      "ke": 72.513,
+      "confidence_detail": {
+        "action": 0.745,
+        "person": 0.936,
+        "keypoints": 0.739
+      }
+    },
+    "created_at_ms": 1778574058546
+  },
+  {
+    "schema_version": "1.0",
+    "event_id": "hado_video_01-score-2313-blue_team",
+    "source": {
+      "id": "hado_video_01",
+      "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+    },
+    "event_type": "score",
+    "frame_index": 2313,
+    "frame_number": 2314,
+    "time_seconds": 96.375,
+    "time": "01:36.375",
+    "player": {
+      "username": "blue_team",
+      "team": "blue_team",
+      "team_label": "蓝方",
+      "track_id": null,
+      "bbox": [
+        386,
+        476,
+        432,
+        524
+      ]
+    },
+    "action": {
+      "type": "score",
+      "label": "得分",
+      "confidence": 0.811,
+      "ke": null
+    },
+    "created_at_ms": 1778574060854,
+    "score": {
+      "team": "blue_team",
+      "team_label": "蓝方"
+    },
+    "ko": {
+      "team": "red_team",
+      "team_label": "红方",
+      "trigger": "K.O.",
+      "confidence": 0.811
+    }
+  }
+]
