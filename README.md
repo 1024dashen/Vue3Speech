@@ -213,3 +213,42 @@ FastAPI
 ## 联系方式
 
 [请添加联系信息]
+
+
+{
+  "schema_version": "1.0",
+  "event_id": "hado_video_01-action-1406-blue_team",
+  "source": {
+    "id": "hado_video_01",
+    "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+  },
+  "event_type": "action",
+  "frame_index": 1406,
+  "frame_number": 1407,
+  "time_seconds": 58.583,
+  "time": "00:58.583",
+  "player": {
+    "username": "blue_team",
+    "team": "blue_team",
+    "team_label": "蓝方",
+    "track_id": 434,
+    "bbox": [
+      1695,
+      647,
+      1920,
+      1027
+    ]
+  },
+  "action": {
+    "type": "raise_hand+squat",
+    "label": "抬手+下蹲",
+    "confidence": 0.945,
+    "ke": 2.517,
+    "confidence_detail": {
+      "action": 0.945,
+      "person": 0.869,
+      "keypoints": 0.88
+    }
+  },
+  "created_at_ms": 1778569359781
+}
