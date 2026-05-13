@@ -1,20 +1,20 @@
 import argparse
-import asyncio
 import json
 import os
 import re
+import shutil
+import subprocess
+import tempfile
+import urllib.request
 from pathlib import Path
+from urllib.parse import urlparse
 
 import dashscope
 from dotenv import load_dotenv
 
-from edge_subtitle_voiceover import (
-    EdgeSubtitleVoiceoverBody,
-    ZimuSubtitleItem,
-    _build_edge_subtitle_voiceover_mp3,
-)
-
 load_dotenv()
+
+_TTS_UA = "Mozilla/5.0 (compatible; qwen-to-date/1.0)"
 
 _ROOT = Path(__file__).resolve().parent
 
@@ -223,48 +223,151 @@ def call_qwen_revise(
     return {"narration": narration, "raw": data}, None, reasons
 
 
-async def narration_to_edge_voiceover_mp3(
+def _dashscope_tts_response_to_dict(resp: object) -> dict:
+    """与 server /tts 一致：避免对响应对象误用 hasattr 触发 __getattr__ KeyError。"""
+    if isinstance(resp, dict):
+        return resp
+    try:
+        return resp.to_dict()  # type: ignore[attr-defined]
+    except Exception:
+        try:
+            return dict(resp)  # type: ignore[arg-type]
+        except Exception:
+            return {"raw": str(resp)}
+
+
+def narration_dashscope_tts_audio_url(
     narration: str,
     *,
-    voice: str = "zh-CN-YunxiNeural",
-) -> str:
+    voice: str = "Ethan",
+    instruction: str = "用特别愤怒的语气说",
+) -> tuple[str, dict]:
     """
-    使用与 server._build_edge_subtitle_voiceover_mp3 相同的 Edge-TTS 管线；
-    解说不按字幕窗拉伸（end_time 为 null），保持自然语速。返回临时文件路径，用毕请删。
+    与 server.py /tts 相同方式调用 DashScope qwen3-tts-flash。
+    返回 (output.audio.url, 完整响应 dict)。
     """
     text = (narration or "").strip()
     if not text:
         raise ValueError("narration 为空")
-    body = EdgeSubtitleVoiceoverBody(
-        voice=voice,
-        subtitles=[
-            ZimuSubtitleItem(id=0, start_time=0, end_time=None, content=text),
-        ],
-    )
-    return await _build_edge_subtitle_voiceover_mp3(body)
+    api_key = os.getenv("DASHSCOPE_API_KEY")
+    if not api_key:
+        raise RuntimeError("缺少环境变量 DASHSCOPE_API_KEY")
+
+    dashscope.base_http_api_url = "https://dashscope.aliyuncs.com/api/v1"
+    try:
+        resp = dashscope.MultiModalConversation.call(
+            model="qwen3-tts-flash",
+            api_key=api_key,
+            text=text,
+            voice=voice,
+            language_type="Chinese",
+            instruction=instruction,
+            stream=False,
+        )
+    except Exception as exc:
+        raise RuntimeError(f"DashScope TTS 请求失败: {exc}") from exc
+
+    payload = _dashscope_tts_response_to_dict(resp)
+    sc = payload.get("status_code")
+    if sc is not None and sc != 200:
+        msg = payload.get("message") or payload.get("code") or str(payload)
+        raise RuntimeError(f"TTS status_code={sc}: {msg}")
+    code = payload.get("code")
+    if isinstance(code, str) and code.strip():
+        raise RuntimeError(f"TTS code={code!r}: {payload.get('message') or payload}")
+
+    out = payload.get("output") or {}
+    audio = out.get("audio") or {}
+    url = (audio.get("url") or "").strip()
+    if not url:
+        raise RuntimeError(f"TTS 响应中无 output.audio.url: {payload!r}")
+    return url, payload
 
 
-def play_mp3_files_sequential(paths: list[str]) -> None:
-    """按给定顺序依次播放本地 MP3（一批播完再播下一批）。"""
+def _try_play_audio_url_stream(url: str) -> bool:
+    """ffplay / mpv 直接播 URL，成功返回 True。"""
+    url = url.strip()
+    ffplay = shutil.which("ffplay")
+    if ffplay:
+        cmd = [
+            ffplay,
+            "-user_agent",
+            _TTS_UA,
+            "-nodisp",
+            "-autoexit",
+            "-loglevel",
+            "quiet",
+            url,
+        ]
+        kw: dict = {"timeout": 7200}
+        if os.name == "nt" and hasattr(subprocess, "CREATE_NO_WINDOW"):
+            kw["creationflags"] = subprocess.CREATE_NO_WINDOW
+        try:
+            r = subprocess.run(cmd, **kw)
+            return r.returncode == 0
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+    mpv = shutil.which("mpv")
+    if mpv:
+        cmd = [mpv, "--no-video", "--really-quiet", f"--user-agent={_TTS_UA}", url]
+        kw = {"timeout": 7200}
+        if os.name == "nt" and hasattr(subprocess, "CREATE_NO_WINDOW"):
+            kw["creationflags"] = subprocess.CREATE_NO_WINDOW
+        try:
+            r = subprocess.run(cmd, **kw)
+            return r.returncode == 0
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+    return False
+
+
+def _fetch_audio_url_to_temp(url: str) -> Path:
+    parsed = urlparse(url.strip())
+    ext = Path(parsed.path).suffix.lower()
+    if ext not in (".mp3", ".wav", ".ogg", ".opus", ".flac"):
+        ext = ".wav"
+    fd, raw = tempfile.mkstemp(suffix=ext)
+    os.close(fd)
+    path = Path(raw)
+    req = urllib.request.Request(url.strip(), headers={"User-Agent": _TTS_UA})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp, path.open("wb") as out:
+            shutil.copyfileobj(resp, out, 256 * 1024)
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+    return path
+
+
+def play_audio_url(url: str) -> None:
+    """优先流式播放 URL；若无 ffplay/mpv 则下载后用 pygame 播放。"""
+    url = url.strip()
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError("无效的音频 URL")
+
+    if _try_play_audio_url_stream(url):
+        return
+
     try:
         import pygame
-    except ImportError:
-        print("未安装 pygame，跳过音频播放（pip install pygame）", flush=True)
-        return
-    paths = [p for p in paths if p and os.path.isfile(p)]
-    if not paths:
-        return
-    pygame.mixer.init()
+    except ImportError as exc:
+        raise RuntimeError(
+            "未找到 ffplay/mpv，且未安装 pygame：请安装 ffmpeg（含 ffplay）或 mpv，或 pip install pygame"
+        ) from exc
+
+    path = _fetch_audio_url_to_temp(url)
     try:
-        for p in paths:
-            pygame.mixer.music.load(p)
-            pygame.mixer.music.play()
-            clock = pygame.time.Clock()
-            while pygame.mixer.music.get_busy():
-                clock.tick(30)
+        pygame.mixer.init()
+        pygame.mixer.music.load(str(path))
+        pygame.mixer.music.play()
+        clock = pygame.time.Clock()
+        while pygame.mixer.music.get_busy():
+            clock.tick(30)
     finally:
         if pygame.mixer.get_init():
             pygame.mixer.quit()
+        path.unlink(missing_ok=True)
 
 
 def main() -> None:
@@ -282,13 +385,19 @@ def main() -> None:
     parser.add_argument(
         "--no-audio",
         action="store_true",
-        help="不根据解说合成 Edge-TTS 音频、不自动播放",
+        help="不调用 DashScope TTS、不自动播放",
     )
     parser.add_argument(
         "--voice",
         type=str,
-        default="zh-CN-YunxiNeural",
-        help="Edge-TTS 语音名（与 server 字幕配音默认一致）",
+        default="Ethan",
+        help="DashScope qwen3-tts-flash 的 voice（与 server /tts 一致，默认 Ethan）",
+    )
+    parser.add_argument(
+        "--tts-instruction",
+        type=str,
+        default="用特别激情高昂的语气，适合解说比赛",
+        help="传给 MultiModalConversation 的 instruction（与 server /tts 默认一致）",
     )
     args = parser.parse_args()
 
@@ -371,23 +480,19 @@ def main() -> None:
                 and narration
                 and str(narration).strip()
             ):
-                mp3_path: str | None = None
                 try:
-                    mp3_path = asyncio.run(
-                        narration_to_edge_voiceover_mp3(
-                            str(narration).strip(),
-                            voice=args.voice,
-                        )
+                    audio_url, tts_payload = narration_dashscope_tts_audio_url(
+                        str(narration).strip(),
+                        voice=args.voice,
+                        instruction=args.tts_instruction,
                     )
-                    play_mp3_files_sequential([mp3_path])
+                    record["tts_url"] = audio_url
+                    rid = tts_payload.get("request_id")
+                    if rid:
+                        record["tts_request_id"] = rid
+                    play_audio_url(audio_url)
                 except Exception as exc:
                     print(f"批次 {batch_index} 解说音频失败: {exc}", flush=True)
-                finally:
-                    if mp3_path and os.path.isfile(mp3_path):
-                        try:
-                            os.unlink(mp3_path)
-                        except OSError:
-                            pass
 
         results.append(record)
         args.output.write_text(
