@@ -7,3 +7,4 @@ qwen-asr
 soundfile
 python-dotenv
 dashscope
+pygame

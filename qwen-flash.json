@@ -42,12 +42,12 @@
       "hado_video_01-score-441-blue_team"
     ],
     "model": {
-      "narration": "蓝方抬手发球攻击"
+      "narration": "蓝方抬手进攻红方下蹲防守"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "蓝方抬手发球攻击"
+    "narration": "蓝方抬手进攻红方下蹲防守"
   },
   {
     "batch_index": 2,
@@ -92,12 +92,12 @@
       "hado_video_01-score-712-blue_team"
     ],
     "model": {
-      "narration": "蓝方连续得分"
+      "narration": "蓝方连续得分压制"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "蓝方连续得分"
+    "narration": "蓝方连续得分压制"
   },
   {
     "batch_index": 4,
@@ -117,12 +117,12 @@
       "hado_video_01-score-883-blue_team"
     ],
     "model": {
-      "narration": "蓝方抬手发球攻击"
+      "narration": "蓝方防御反击成功"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "蓝方抬手发球攻击"
+    "narration": "蓝方防御反击成功"
   },
   {
     "batch_index": 5,
@@ -217,12 +217,12 @@
       "hado_video_01-action-1456-blue_team"
     ],
     "model": {
-      "narration": "红方抬手进攻蓝方下蹲化解"
+      "narration": "红方抬手进攻蓝方下蹲防守"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "红方抬手进攻蓝方下蹲化解"
+    "narration": "红方抬手进攻蓝方下蹲防守"
   },
   {
     "batch_index": 9,
@@ -267,12 +267,12 @@
       "hado_video_01-score-1905-blue_team"
     ],
     "model": {
-      "narration": "红方抬手进攻蓝方下蹲化解"
+      "narration": "红方抬手进攻蓝方下蹲防守"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "红方抬手进攻蓝方下蹲化解"
+    "narration": "红方抬手进攻蓝方下蹲防守"
   },
   {
     "batch_index": 11,
@@ -367,12 +367,12 @@
       "hado_video_01-score-2248-blue_team"
     ],
     "model": {
-      "narration": "蓝方连续得分压制红方"
+      "narration": "蓝方连续得分"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "蓝方连续得分压制红方"
+    "narration": "蓝方连续得分"
   },
   {
     "batch_index": 15,
@@ -417,11 +417,19 @@
       "hado_video_01-score-2313-blue_team"
     ],
     "model": {
-      "narration": "蓝方连续得分"
+      "narration": "蓝方再下一城，红方下蹲化解"
     },
-    "policy_violations": [],
-    "narration_revised": false,
+    "policy_violations": [
+      "包含禁用子串:再下一城",
+      "包含禁用子串:下一城"
+    ],
+    "revision_error": null,
+    "revision_model": {
+      "narration": "蓝方连续得分，红方下蹲化解"
+    },
+    "revision_violations": [],
+    "narration_revised": true,
     "revision_still_invalid": false,
-    "narration": "蓝方连续得分"
+    "narration": "蓝方连续得分，红方下蹲化解"
   }
 ]
