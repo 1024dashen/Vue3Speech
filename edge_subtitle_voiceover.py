@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 from edge_tts import Communicate
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydub import AudioSegment
 
 _ROOT = Path(__file__).resolve().parent
@@ -20,15 +20,21 @@ _ffmpeg_exe_cache: str | None | bool = False  # False = 未解析, None = 无, s
 class ZimuSubtitleItem(BaseModel):
     id: int
     start_time: int = Field(..., ge=0)
-    end_time: int = Field(..., ge=0)
+    end_time: int | None = Field(
+        default=None,
+        description="结束时间（ms）。省略或 null 表示不按时长拉伸，按 TTS 自然时长输出。",
+    )
     content: str
 
-    def target_duration_ms(self) -> int:
-        return self.end_time - self.start_time
+    @model_validator(mode="after")
+    def _end_after_start(self) -> ZimuSubtitleItem:
+        if self.end_time is not None and self.end_time <= self.start_time:
+            raise ValueError(f"字幕 id={self.id}: end_time 必须大于 start_time（若需自然语速请将 end_time 置为 null）")
+        return self
 
 
 class EdgeSubtitleVoiceoverBody(BaseModel):
-    """与 subtitles.json 中 subtitles 数组项结构一致，按时间轴对齐 Edge-TTS 配音。"""
+    """与 subtitles.json 中 subtitles 数组项结构一致，按时间轴对齐 Edge-TTS 配音（end_time 可省略）。"""
 
     voice: str = "zh-CN-YunxiNeural"
     subtitles: list[ZimuSubtitleItem] = Field(..., min_length=1)
@@ -166,8 +172,6 @@ async def _build_edge_subtitle_voiceover_mp3(
     （避免 Windows 上先写临时文件再 shutil.move 时文件仍被占用导致失败）。
     """
     for sub in body.subtitles:
-        if sub.end_time <= sub.start_time:
-            raise ValueError(f"字幕 id={sub.id}: end_time 必须大于 start_time")
         if not (sub.content or "").strip():
             raise ValueError(f"字幕 id={sub.id}: content 不能为空")
 
@@ -182,11 +186,14 @@ async def _build_edge_subtitle_voiceover_mp3(
         subs = body.subtitles
         for i, sub in enumerate(subs):
             text = sub.content.strip()
-            target_duration_ms = sub.target_duration_ms()
             temp_path = os.path.join(temp_dir, f"clip_{sub.id}_raw.mp3")
             await _zimu_save_edge_tts(text, body.voice, temp_path)
             raw_audio = AudioSegment.from_mp3(temp_path)
             original_duration_ms = len(raw_audio)
+            if sub.end_time is None:
+                target_duration_ms = original_duration_ms
+            else:
+                target_duration_ms = sub.end_time - sub.start_time
             speed_factor = _zimu_calculate_speed_factor(original_duration_ms, target_duration_ms)
             if abs(speed_factor - 1.0) > 0.01:
                 adjusted_audio = await asyncio.to_thread(_zimu_time_stretch_atempo, raw_audio, speed_factor)
@@ -195,7 +202,11 @@ async def _build_edge_subtitle_voiceover_mp3(
             final_audio += adjusted_audio
             if i + 1 < len(subs):
                 next_start = subs[i + 1].start_time
-                gap_ms = next_start - sub.end_time
+                if sub.end_time is None:
+                    effective_end = sub.start_time + len(adjusted_audio)
+                else:
+                    effective_end = sub.end_time
+                gap_ms = next_start - effective_end
                 if gap_ms > 0:
                     final_audio += AudioSegment.silent(duration=gap_ms)
         await asyncio.to_thread(final_audio.export, out_path, format="mp3")

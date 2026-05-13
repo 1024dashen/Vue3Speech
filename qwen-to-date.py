@@ -223,19 +223,14 @@ def call_qwen_revise(
     return {"narration": narration, "raw": data}, None, reasons
 
 
-# 单句解说无真实时间轴：给足目标时长，避免 TTS 被压得过快（与 server 管线一致）
-_NARRATION_EDGE_TARGET_MS = 15000
-
-
 async def narration_to_edge_voiceover_mp3(
     narration: str,
     *,
     voice: str = "zh-CN-YunxiNeural",
-    target_window_ms: int = _NARRATION_EDGE_TARGET_MS,
 ) -> str:
     """
-    使用与 server._build_edge_subtitle_voiceover_mp3 相同的 Edge-TTS + 时长对齐逻辑，
-    将解说合成单段 MP3。返回临时文件路径，调用方用毕应删除。
+    使用与 server._build_edge_subtitle_voiceover_mp3 相同的 Edge-TTS 管线；
+    解说不按字幕窗拉伸（end_time 为 null），保持自然语速。返回临时文件路径，用毕请删。
     """
     text = (narration or "").strip()
     if not text:
@@ -243,7 +238,7 @@ async def narration_to_edge_voiceover_mp3(
     body = EdgeSubtitleVoiceoverBody(
         voice=voice,
         subtitles=[
-            ZimuSubtitleItem(id=0, start_time=0, end_time=target_window_ms, content=text),
+            ZimuSubtitleItem(id=0, start_time=0, end_time=None, content=text),
         ],
     )
     return await _build_edge_subtitle_voiceover_mp3(body)
