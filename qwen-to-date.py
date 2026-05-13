@@ -1,11 +1,18 @@
 import argparse
+import asyncio
 import json
 import os
 import re
 from pathlib import Path
 
-from dotenv import load_dotenv
 import dashscope
+from dotenv import load_dotenv
+
+from edge_subtitle_voiceover import (
+    EdgeSubtitleVoiceoverBody,
+    ZimuSubtitleItem,
+    _build_edge_subtitle_voiceover_mp3,
+)
 
 load_dotenv()
 
@@ -216,6 +223,55 @@ def call_qwen_revise(
     return {"narration": narration, "raw": data}, None, reasons
 
 
+# 单句解说无真实时间轴：给足目标时长，避免 TTS 被压得过快（与 server 管线一致）
+_NARRATION_EDGE_TARGET_MS = 15000
+
+
+async def narration_to_edge_voiceover_mp3(
+    narration: str,
+    *,
+    voice: str = "zh-CN-YunxiNeural",
+    target_window_ms: int = _NARRATION_EDGE_TARGET_MS,
+) -> str:
+    """
+    使用与 server._build_edge_subtitle_voiceover_mp3 相同的 Edge-TTS + 时长对齐逻辑，
+    将解说合成单段 MP3。返回临时文件路径，调用方用毕应删除。
+    """
+    text = (narration or "").strip()
+    if not text:
+        raise ValueError("narration 为空")
+    body = EdgeSubtitleVoiceoverBody(
+        voice=voice,
+        subtitles=[
+            ZimuSubtitleItem(id=0, start_time=0, end_time=target_window_ms, content=text),
+        ],
+    )
+    return await _build_edge_subtitle_voiceover_mp3(body)
+
+
+def play_mp3_files_sequential(paths: list[str]) -> None:
+    """按给定顺序依次播放本地 MP3（一批播完再播下一批）。"""
+    try:
+        import pygame
+    except ImportError:
+        print("未安装 pygame，跳过音频播放（pip install pygame）", flush=True)
+        return
+    paths = [p for p in paths if p and os.path.isfile(p)]
+    if not paths:
+        return
+    pygame.mixer.init()
+    try:
+        for p in paths:
+            pygame.mixer.music.load(p)
+            pygame.mixer.music.play()
+            clock = pygame.time.Clock()
+            while pygame.mixer.music.get_busy():
+                clock.tick(30)
+    finally:
+        if pygame.mixer.get_init():
+            pygame.mixer.quit()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="按批读取 ZMQ 事件 JSONL，调用千问生成解说并写入 JSON")
     parser.add_argument("--input", type=Path, default=_ROOT / "zmq_events.jsonl", help="输入 JSONL")
@@ -228,6 +284,17 @@ def main() -> None:
         help="提示词 JSON（system、user_note、可选 forbidden/final_only/revision_system）",
     )
     parser.add_argument("--batch-size", type=int, default=10, help="每多少行事件调用一次模型")
+    parser.add_argument(
+        "--no-audio",
+        action="store_true",
+        help="不根据解说合成 Edge-TTS 音频、不自动播放",
+    )
+    parser.add_argument(
+        "--voice",
+        type=str,
+        default="zh-CN-YunxiNeural",
+        help="Edge-TTS 语音名（与 server 字幕配音默认一致）",
+    )
     args = parser.parse_args()
 
     prompts = load_prompts(args.prompts)
@@ -303,6 +370,29 @@ def main() -> None:
                 print(f"批次 {batch_index}: 已重写 -> {narration}")
             else:
                 print(f"批次 {batch_index}: {narration}")
+
+            if (
+                not args.no_audio
+                and narration
+                and str(narration).strip()
+            ):
+                mp3_path: str | None = None
+                try:
+                    mp3_path = asyncio.run(
+                        narration_to_edge_voiceover_mp3(
+                            str(narration).strip(),
+                            voice=args.voice,
+                        )
+                    )
+                    play_mp3_files_sequential([mp3_path])
+                except Exception as exc:
+                    print(f"批次 {batch_index} 解说音频失败: {exc}", flush=True)
+                finally:
+                    if mp3_path and os.path.isfile(mp3_path):
+                        try:
+                            os.unlink(mp3_path)
+                        except OSError:
+                            pass
 
         results.append(record)
         args.output.write_text(
