@@ -101,7 +101,7 @@ class DashscopeTTSBody(BaseModel):
     """与 ttstest.py 一致：仅 text 由请求传入，其余参数写死为示例脚本中的值。"""
 
     text: str
-    voice: str = "Cherry"  # 新增语音参数，默认 Cherry
+    voice: str = "Ethan"  # 新增语音参数，默认 Ethan
     instruction: str = ""
     instructions: str = ""
 
