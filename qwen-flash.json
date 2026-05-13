@@ -17,14 +17,14 @@
       "hado_video_01-score-225-blue_team"
     ],
     "model": {
-      "narration": "蓝方抬手发球攻击"
+      "narration": "蓝方抬手反击红方下蹲"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "蓝方抬手发球攻击",
-    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/582cabd7-8c86-94fe-8a03-a95a3696b709.wav?Expires=1778744348&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=Oierp4iUa1wj2yYRcnD%2FaYQAbMQ%3D",
-    "tts_request_id": "582cabd7-8c86-94fe-8a03-a95a3696b709"
+    "narration": "蓝方抬手反击红方下蹲",
+    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/6d023a61-731b-9b73-91f1-c327cde0716e.wav?Expires=1778745215&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=t%2FBjWF3laxY2%2F41FmrY8NGxO0W8%3D",
+    "tts_request_id": "6d023a61-731b-9b73-91f1-c327cde0716e"
   },
   {
     "batch_index": 1,
@@ -44,14 +44,14 @@
       "hado_video_01-score-441-blue_team"
     ],
     "model": {
-      "narration": "蓝方抬手进攻压制"
+      "narration": "蓝方抬手进攻红方下蹲防守"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "蓝方抬手进攻压制",
-    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/03a5c7e5-dfa8-9669-9ac0-8149deee786d.wav?Expires=1778744353&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=A6fnhqlyI6Y6si%2Fi6pW%2BU9puCNs%3D",
-    "tts_request_id": "03a5c7e5-dfa8-9669-9ac0-8149deee786d"
+    "narration": "蓝方抬手进攻红方下蹲防守",
+    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/4518e1a1-79d2-9541-b5c2-786701f3a5f2.wav?Expires=1778745219&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=7Q1I8kEbNHqpycjfvF21EwZsKDg%3D",
+    "tts_request_id": "4518e1a1-79d2-9541-b5c2-786701f3a5f2"
   },
   {
     "batch_index": 2,
@@ -71,14 +71,14 @@
       "hado_video_01-score-599-blue_team"
     ],
     "model": {
-      "narration": "蓝方抬手发球攻击"
+      "narration": "蓝方连续进攻压制"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "蓝方抬手发球攻击",
-    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/3fb1f433-b87e-90ea-9a64-b9310249a5cf.wav?Expires=1778744356&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=68pVa5v3ihnOdaG5WSifSe%2Fkf04%3D",
-    "tts_request_id": "3fb1f433-b87e-90ea-9a64-b9310249a5cf"
+    "narration": "蓝方连续进攻压制",
+    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/a8b3fdf1-bebc-9c4f-9be3-d5e4280096b8.wav?Expires=1778745224&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=02A%2BYKPJGVAR7TAjWroxEtmeedY%3D",
+    "tts_request_id": "a8b3fdf1-bebc-9c4f-9be3-d5e4280096b8"
   },
   {
     "batch_index": 3,
@@ -98,14 +98,14 @@
       "hado_video_01-score-712-blue_team"
     ],
     "model": {
-      "narration": "蓝方连续得分红方防守反击"
+      "narration": "蓝方连续得分"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "蓝方连续得分红方防守反击",
-    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/b27552e0-cbc7-995c-b76b-916f2f5ed708.wav?Expires=1778744359&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=q6KtvpgknNu68ZS1MPfkuvfT870%3D",
-    "tts_request_id": "b27552e0-cbc7-995c-b76b-916f2f5ed708"
+    "narration": "蓝方连续得分",
+    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/ded80fa1-53d1-98dc-8956-3cda1a1d9d63.wav?Expires=1778745227&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=cgt02ExHnTPlXJ7jFQYeo6PZEFk%3D",
+    "tts_request_id": "ded80fa1-53d1-98dc-8956-3cda1a1d9d63"
   },
   {
     "batch_index": 4,
@@ -125,14 +125,14 @@
       "hado_video_01-score-883-blue_team"
     ],
     "model": {
-      "narration": "蓝方抬手发球攻击"
+      "narration": "蓝方连续攻防压制"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "蓝方抬手发球攻击",
-    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/1b4db796-4ef8-92af-95e5-30a0e55ef125.wav?Expires=1778744364&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=YTWd3bCEb7O7k5WK69RuOt%2BVpLc%3D",
-    "tts_request_id": "1b4db796-4ef8-92af-95e5-30a0e55ef125"
+    "narration": "蓝方连续攻防压制",
+    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/6d3ef9ae-bbdf-9a3b-ab03-21ba3292e447.wav?Expires=1778745229&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=eQpvPn74uPZXizVp1rDk3vG9%2FKs%3D",
+    "tts_request_id": "6d3ef9ae-bbdf-9a3b-ab03-21ba3292e447"
   },
   {
     "batch_index": 5,
@@ -152,14 +152,14 @@
       "hado_video_01-action-989-red_team"
     ],
     "model": {
-      "narration": "红方抬手发球攻击"
+      "narration": "红方抬手进攻蓝方下蹲防守"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "红方抬手发球攻击",
-    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/496a6cfe-e986-91b8-941b-70e5bb04a449.wav?Expires=1778744368&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=r%2FgVHKH%2FDsSFr3%2BO2QBcTJVK4ZA%3D",
-    "tts_request_id": "496a6cfe-e986-91b8-941b-70e5bb04a449"
+    "narration": "红方抬手进攻蓝方下蹲防守",
+    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/065af696-0668-91fe-bc83-03aa566efb54.wav?Expires=1778745233&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=1B%2Fm3CBQGu9ZsrY394WeIElRgKk%3D",
+    "tts_request_id": "065af696-0668-91fe-bc83-03aa566efb54"
   },
   {
     "batch_index": 6,
@@ -185,8 +185,8 @@
     "narration_revised": false,
     "revision_still_invalid": false,
     "narration": "红方抬手进攻",
-    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/961480be-8dcb-9f71-9a1a-62944de31d19.wav?Expires=1778744371&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=ngYHFW6j%2Bh6wdUqm3Dg19f2HOBc%3D",
-    "tts_request_id": "961480be-8dcb-9f71-9a1a-62944de31d19"
+    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/652408da-4ad0-9176-b7ab-51b77ac94680.wav?Expires=1778745237&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=XQO5L2z%2FymVhkXivfsqCSOtVeXc%3D",
+    "tts_request_id": "652408da-4ad0-9176-b7ab-51b77ac94680"
   },
   {
     "batch_index": 7,
@@ -206,14 +206,14 @@
       "hado_video_01-score-1310-red_team"
     ],
     "model": {
-      "narration": "红方抬手发球攻击"
+      "narration": "红方防御反击得手"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "红方抬手发球攻击",
-    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/1596dc15-8028-9fc5-a015-56b0581d2610.wav?Expires=1778744374&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=6SFwIAG7rhgLN9fQj8kdNEJ5Foc%3D",
-    "tts_request_id": "1596dc15-8028-9fc5-a015-56b0581d2610"
+    "narration": "红方防御反击得手",
+    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/4b2c27d4-3f4e-9f8a-8bec-6e1988dfb732.wav?Expires=1778745241&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=ly58YpUTWKRmmoaE8CmFwNfEPNQ%3D",
+    "tts_request_id": "4b2c27d4-3f4e-9f8a-8bec-6e1988dfb732"
   },
   {
     "batch_index": 8,
@@ -233,14 +233,14 @@
       "hado_video_01-action-1456-blue_team"
     ],
     "model": {
-      "narration": "红方抬手进攻蓝方下蹲防守"
+      "narration": "蓝方抬手进攻红方下蹲防守"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "红方抬手进攻蓝方下蹲防守",
-    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/708c6851-92db-94b9-af63-7d29c214c280.wav?Expires=1778744377&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=Zf6CZWUay5wvSqULEIxH3%2FbJ3Ao%3D",
-    "tts_request_id": "708c6851-92db-94b9-af63-7d29c214c280"
+    "narration": "蓝方抬手进攻红方下蹲防守",
+    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/5c76f1cc-0ad2-9c82-bc86-58084cc6bc4b.wav?Expires=1778745246&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=hkDfIzuH1p2Mlfsed3YepwBYaH0%3D",
+    "tts_request_id": "5c76f1cc-0ad2-9c82-bc86-58084cc6bc4b"
   },
   {
     "batch_index": 9,
@@ -260,14 +260,14 @@
       "hado_video_01-score-1657-blue_team"
     ],
     "model": {
-      "narration": "红方抬手发球攻击"
+      "narration": "蓝方抬手进攻红方下蹲防守"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "红方抬手发球攻击",
-    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/999f956c-f5eb-9e6e-a606-2b8459e1b638.wav?Expires=1778744382&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=zTvow097zdSUcTgJzwz5dYOhLcc%3D",
-    "tts_request_id": "999f956c-f5eb-9e6e-a606-2b8459e1b638"
+    "narration": "蓝方抬手进攻红方下蹲防守",
+    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/08923dd8-e281-9dd1-9220-01780383da1e.wav?Expires=1778745250&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=s0No0o9%2Bfi8GCgn5VzrRoWKniwI%3D",
+    "tts_request_id": "08923dd8-e281-9dd1-9220-01780383da1e"
   },
   {
     "batch_index": 10,
@@ -287,14 +287,14 @@
       "hado_video_01-score-1905-blue_team"
     ],
     "model": {
-      "narration": "红方抬手进攻蓝方下蹲化解"
+      "narration": "红方抬手进攻蓝方下蹲防守"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "红方抬手进攻蓝方下蹲化解",
-    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/ccd544c7-46fa-99df-ac96-bdec23d9132f.wav?Expires=1778744385&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=of9vKuO4lSnH1jn33Ps97jjnD4g%3D",
-    "tts_request_id": "ccd544c7-46fa-99df-ac96-bdec23d9132f"
+    "narration": "红方抬手进攻蓝方下蹲防守",
+    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/8122f070-5d1c-9326-849f-7b607d0b3723.wav?Expires=1778745255&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=nx5IdGKo5mBN4XbzsHSfZhzV2jM%3D",
+    "tts_request_id": "8122f070-5d1c-9326-849f-7b607d0b3723"
   },
   {
     "batch_index": 11,
@@ -314,14 +314,14 @@
       "hado_video_01-action-2082-red_team"
     ],
     "model": {
-      "narration": "蓝方抬手进攻红方下蹲防守"
+      "narration": "蓝方抬手进攻红方防御反击"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "蓝方抬手进攻红方下蹲防守",
-    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/89f318cc-5862-94f1-a689-3b034ea6fa0e.wav?Expires=1778744390&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=GndU7fXdkGVvgcTs9TMmaF%2BeZ7k%3D",
-    "tts_request_id": "89f318cc-5862-94f1-a689-3b034ea6fa0e"
+    "narration": "蓝方抬手进攻红方防御反击",
+    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/a0ce7b80-3532-9358-b402-b539eafee6f5.wav?Expires=1778745261&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=TMCdQRjnlgJlZN%2B2CbpDY43L8f0%3D",
+    "tts_request_id": "a0ce7b80-3532-9358-b402-b539eafee6f5"
   },
   {
     "batch_index": 12,
@@ -341,14 +341,14 @@
       "hado_video_01-score-2204-blue_team"
     ],
     "model": {
-      "narration": "蓝方抬手进攻"
+      "narration": "蓝方抬手进攻红方下蹲防守"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "蓝方抬手进攻",
-    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/1ccdd537-3e72-914c-a279-17040163d927.wav?Expires=1778744394&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=hbcko88iUmtrlkwTz7gJg7mFaFw%3D",
-    "tts_request_id": "1ccdd537-3e72-914c-a279-17040163d927"
+    "narration": "蓝方抬手进攻红方下蹲防守",
+    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/453d8a74-49df-9164-92fd-e10ee0880047.wav?Expires=1778745266&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=HK50d67rrFKeTvorm8DmAua7eAI%3D",
+    "tts_request_id": "453d8a74-49df-9164-92fd-e10ee0880047"
   },
   {
     "batch_index": 13,
@@ -368,14 +368,14 @@
       "hado_video_01-score-2245-blue_team"
     ],
     "model": {
-      "narration": "蓝方连续得分"
+      "narration": "蓝方连续得分压制红方"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "蓝方连续得分",
-    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/5ecf352d-d389-9c34-881d-57696eb4a5b9.wav?Expires=1778744397&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=TMzdTxxZn6bgZGSppTrDNqyCKwY%3D",
-    "tts_request_id": "5ecf352d-d389-9c34-881d-57696eb4a5b9"
+    "narration": "蓝方连续得分压制红方",
+    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/44f80bad-0435-9e57-be3e-bf238b34d272.wav?Expires=1778745271&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=BPp1oBYeoGM0Ponhtb19U3VgaPM%3D",
+    "tts_request_id": "44f80bad-0435-9e57-be3e-bf238b34d272"
   },
   {
     "batch_index": 14,
@@ -395,14 +395,14 @@
       "hado_video_01-score-2248-blue_team"
     ],
     "model": {
-      "narration": "蓝方连续得分压制红方"
+      "narration": "蓝方连续得分"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "蓝方连续得分压制红方",
-    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/47d87a68-424e-9350-9a12-5324cacaf95a.wav?Expires=1778744399&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=oCLhP6guCcNisDmj7F0Hp0rcpUY%3D",
-    "tts_request_id": "47d87a68-424e-9350-9a12-5324cacaf95a"
+    "narration": "蓝方连续得分",
+    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/8773508c-00b2-9c36-ac78-af869f1e3080.wav?Expires=1778745275&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=TtGri9LD0QfDeyHcZKqxgOBb3lU%3D",
+    "tts_request_id": "8773508c-00b2-9c36-ac78-af869f1e3080"
   },
   {
     "batch_index": 15,
@@ -428,8 +428,8 @@
     "narration_revised": false,
     "revision_still_invalid": false,
     "narration": "红方连续得分",
-    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/6ea44e29-9e2d-91cd-8946-f93078834bb0.wav?Expires=1778744403&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=xcMtfzPV8%2F0ob%2BZu4nv6fSkHyOo%3D",
-    "tts_request_id": "6ea44e29-9e2d-91cd-8946-f93078834bb0"
+    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/b64c0cb8-ae32-9f6f-b179-494a0627f439.wav?Expires=1778745278&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=9HTwS%2BgsxQMejdZ3DEnchvVIVFc%3D",
+    "tts_request_id": "b64c0cb8-ae32-9f6f-b179-494a0627f439"
   },
   {
     "batch_index": 16,
@@ -449,13 +449,13 @@
       "hado_video_01-score-2313-blue_team"
     ],
     "model": {
-      "narration": "蓝方连续得分红方防线稳固"
+      "narration": "蓝方再得一分"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "蓝方连续得分红方防线稳固",
-    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/06866912-f495-910f-9799-4a65b67da2ad.wav?Expires=1778744406&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=JbkZQNzfySx%2F7fyPHSB10nkMtLc%3D",
-    "tts_request_id": "06866912-f495-910f-9799-4a65b67da2ad"
+    "narration": "蓝方再得一分",
+    "tts_url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/qwen3-tts/20260513/1572791494611419/39dc8cf7-9514-9059-a3f2-b4d9502aed70.wav?Expires=1778745281&OSSAccessKeyId=LTAI5tGzqbGcEmE58b221XQy&Signature=0UEFz3zUDiEOpVbbp%2BxaAcVM8gI%3D",
+    "tts_request_id": "39dc8cf7-9514-9059-a3f2-b4d9502aed70"
   }
 ]
