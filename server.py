@@ -102,6 +102,8 @@ class DashscopeTTSBody(BaseModel):
 
     text: str
     voice: str = "Cherry"  # 新增语音参数，默认 Cherry
+    instruction: str = ""
+    instructions: str = ""
 
 
 def _write_wav_pcm16le_mono(wav_path: str, pcm16le: bytes, sample_rate: int = 16000) -> None:
@@ -225,6 +227,7 @@ async def dashscope_tts(body: DashscopeTTSBody):
             text=body.text,
             voice=body.voice,  # 使用请求中的语音参数
             language_type="Chinese",
+            instruction="用特别愤怒的语气说",
             stream=False,
         )
     except Exception as e:
