@@ -8,3 +8,4 @@ soundfile
 python-dotenv
 dashscope
 pygame
+sounddevice
