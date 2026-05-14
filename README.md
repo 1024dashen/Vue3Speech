@@ -202,6 +202,76 @@ FastAPI
 | 演示页 TTS 无法播放 | 多为外链 wav 加载限制；可看返回 JSON 中的 `url` 手动下载，或扩展后端代理 |
 | `/transcribe` 上传 **webm** 报 `Format not recognised` / `NoBackendError` / 提示找不到 ffmpeg | 安装 FFmpeg；若 PowerShell 里 `ffmpeg -version` 正常但服务仍报错，在 `.env` 设置 **`FFMPEG_PATH`** 指向 `ffmpeg.exe` 绝对路径（IDE 子进程 PATH 常不含用户 PATH） |
 
+## ZMQ 赛事解说（`qwen-to-data4.py`）
+
+订阅 **ZMQ PUB** 推送的比赛事件（与 `zmqtest.py` 相同协议），按批累积事件后调用 **DashScope 千问（`qwen-flash`）** 生成短解说，可选 **实时 TTS 播报**（需本机安装 `sounddevice`）或回退为整段 URL 合成；结果写入 JSON，订阅到的原始事件默认落盘为 NDJSON。
+
+### 依赖与准备
+
+- 已安装项目依赖：`pip install -r requirements.txt`（含 **`pyzmq`**、`dashscope`、`python-dotenv` 等）。
+- `.env` 中配置 **`DASHSCOPE_API_KEY`**（与上文 FastAPI TTS 相同）。
+- 本机需有 **ZMQ 发布端**（例如仓库内 `zmqserver.py`），订阅端连接 PUB 地址后，收到的字符串格式为：**`{topic} {JSON 负载}`**（第一个空格分隔 topic 与 payload，payload 为一条事件的 JSON）。
+- **实时语音**：安装 **`sounddevice`** 后走 DashScope **QwenTtsRealtime** WebSocket；未安装则改为 HTTP 整段 TTS + 播放 URL。
+
+### 基本用法
+
+```bash
+# 默认：订阅 tcp://localhost:5557，topic hado.event，每 10 条事件总结一次
+python qwen-to-data4.py
+
+python qwen-to-data4.py -b 1
+
+# 每 5 条总结一次，并指定 PUB 地址
+python qwen-to-data4.py -b 5 --zmq-endpoint tcp://192.168.1.10:5557
+
+python qwen-to-data4.py -b 5 --zmq-endpoint tcp://localhost:5557
+
+# 仅生成解说与写文件，不调用 TTS、不播放
+python qwen-to-data4.py --no-audio
+
+# 离线调试：从 JSONL 一次性读入事件（不走 ZMQ）
+python qwen-to-data4.py --input zmq_events.jsonl
+```
+
+**退出**：在 ZMQ 模式下按 **Ctrl+C** 停止订阅；若缓冲区里不足一批的事件，会作为**最后一批**（`is_final_batch`）再调用一次模型。
+
+### 命令行参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--input` | （不指定） | 若给定路径，则从该 **JSONL** 一次性读取多行 JSON 事件（调试）；**不指定时走 ZMQ 订阅**。 |
+| `--zmq-endpoint` | `tcp://localhost:5557` | ZMQ **SUB** 连接的 PUB 地址。 |
+| `--zmq-topic` | `hado.event` | 订阅前缀（`SUBSCRIBE` 与 `zmqtest.py` 一致）。 |
+| `--zmq-jsonl-log` | 自动生成 | 将每条收到的事件以 **NDJSON** 追加写入该路径；**未指定**时写入项目根目录 **`zmq_events_<YYYYMMDD_HHMMSS>.jsonl`**。 |
+| `--output` | `qwen-flash.json` | 解说结果 JSON 数组输出路径。 |
+| `--schema` | `jsonschema.json` | 传给模型的 JSON Schema 文件。 |
+| `--prompts` | `qwen-to-date-prompts.json` | 提示词 JSON（须含 `system`、`user_note` 等，见脚本内校验）。 |
+| `-b` / `--batch-size` / `--events-per-summary` | `10`（默认可被环境变量覆盖） | 每累积 **N 条**事件做一次解说总结（调用模型 + 可选 TTS）。 |
+| `--no-audio` | 关闭 | 不调用 DashScope TTS、不自动播放。 |
+| `--voice` | `Ethan` | TTS 音色（实时 WebSocket 与 URL 回退共用）。 |
+| `--tts-instruction` | 见脚本内默认 | 实时 TTS 的 session 说明；URL 回退时为合成指令。 |
+| `--realtime-tts-finish-wait` | `20` | 实时 TTS：每次 `finish` 后等待服务端结束/关连接的最长秒数，**超时强制关闭**以免阻塞后续播报。 |
+
+### 相关环境变量
+
+| 变量 | 说明 |
+|------|------|
+| `QWEN_EVENTS_BATCH` | 正整数；在未传 **`-b` / `--batch-size`** 时作为「每多少条总结一次」的默认值（与命令行冲突时以命令行为准）。 |
+| `QWEN_REALTIME_TTS_WAIT` | 浮点秒数（建议 5～60）；作为 **`--realtime-tts-finish-wait`** 的默认值。 |
+
+### 实时播报「播一段就停」
+
+解说线程会持续生成多批解说，但 **TTS 线程同一时刻只处理一条** WebSocket 会话。若服务端在部分请求上迟迟不发结束类事件（如 `response.done`），等待逻辑会长时间占住 TTS 线程，**后续批次的语音只能排队**，听起来就像「播一半就停了」。脚本会在 **`--realtime-tts-finish-wait`（默认 20s）** 后强制 `close` 并进入下一段；过短可能略微截断尾音，过长则更容易积压。
+
+### 输出说明
+
+- **`--output`**：每批解说、错误信息、TTS 元数据等会追加写入该 JSON 文件（运行过程中会反复覆盖写入整个数组）。
+- **订阅 NDJSON**：默认文件名形如 `zmq_events_20260514_165730.jsonl`，一行一个事件对象，便于事后对齐与回放。
+
+### 相关脚本
+
+- **`zmqtest.py`**：仅订阅并打印、可选写入 NDJSON，便于单独验证 ZMQ 与消息格式。
+
 ## 许可证
 
 [请添加许可证信息]

@@ -195,6 +195,28 @@ def process_one_batch(
         )
 
 
+def _env_int(name: str, default: int, *, minimum: int = 1) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        v = int(raw, 10)
+    except ValueError:
+        return default
+    return max(minimum, v)
+
+
+def _env_float(name: str, default: float, *, minimum: float, maximum: float) -> float:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        v = float(raw.replace(",", "."))
+    except ValueError:
+        return default
+    return max(minimum, min(maximum, v))
+
+
 def _fragment_stats(events: list[dict]) -> dict:
     action_n = sum(1 for e in events if e.get("event_type") == "action")
     score_n = sum(1 for e in events if e.get("event_type") == "score")
@@ -550,6 +572,13 @@ class StreamPcmPlayer:
                 idle_deadline = None
             time.sleep(0.02)
 
+    def end_segment(self) -> None:
+        """播完当前队列中的 PCM 尾部，不关闭底层输出（多段连续 TTS 复用同一设备）。"""
+        if self._closed.is_set():
+            return
+        self.drain()
+        time.sleep(_TAIL_PLAYBACK_SEC)
+
     def close(self) -> None:
         if self._closed.is_set():
             return
@@ -561,7 +590,8 @@ class StreamPcmPlayer:
 
 
 class NarrationRealtimeTtsCallback(QwenTtsRealtimeCallback):
-    def __init__(self) -> None:
+    def __init__(self, shared_pcm_player: StreamPcmPlayer | None = None) -> None:
+        self._shared_pcm_player = shared_pcm_player
         self.complete_event = threading.Event()
         self.connection_closed_event = threading.Event()
         self._player: StreamPcmPlayer | None = None
@@ -572,7 +602,10 @@ class NarrationRealtimeTtsCallback(QwenTtsRealtimeCallback):
         self._recent_types: list[str] = []
 
     def on_open(self) -> None:
-        self._player = StreamPcmPlayer()
+        if self._shared_pcm_player is not None:
+            self._player = self._shared_pcm_player
+        else:
+            self._player = StreamPcmPlayer()
 
     def mark_finish_sent(self) -> None:
         self._finish_sent = True
@@ -583,7 +616,10 @@ class NarrationRealtimeTtsCallback(QwenTtsRealtimeCallback):
 
     def on_close(self, close_status_code, close_msg) -> None:
         if self._player is not None:
-            self._player.close()
+            if self._shared_pcm_player is not None:
+                self._player.end_segment()
+            else:
+                self._player.close()
             self._player = None
         self.connection_closed_event.set()
         self.complete_event.set()
@@ -602,7 +638,7 @@ class NarrationRealtimeTtsCallback(QwenTtsRealtimeCallback):
                 b64 = response.get("delta")
                 if isinstance(b64, str) and self._player is not None:
                     self._player.write(base64.b64decode(b64))
-            # 完成信号：以 SDK 的 response.done 为主；部分链路可能只关连接不发 done
+            # 完成信号：以 response.done 为主；部分链路只发 response.audio.done / session.finished
             if ev == "session.finished" or (
                 self._finish_sent
                 and ev
@@ -610,6 +646,8 @@ class NarrationRealtimeTtsCallback(QwenTtsRealtimeCallback):
                     "response.done",
                     "response.completed",
                     "response.output_item.done",
+                    "response.audio.done",
+                    "response.audio.completed",
                 )
             ):
                 self.complete_event.set()
@@ -620,12 +658,20 @@ class NarrationRealtimeTtsCallback(QwenTtsRealtimeCallback):
         return self.connection_closed_event.wait(timeout=timeout)
 
 
-def _wait_realtime_tts_after_finish(rt: object, cb: NarrationRealtimeTtsCallback) -> bool:
+def _wait_realtime_tts_after_finish(
+    rt: object,
+    cb: NarrationRealtimeTtsCallback,
+    *,
+    max_wait_sec: float = 20.0,
+) -> bool:
     """
     finish() 之后：同时等「完成事件」或「连接已关闭」。
     若服务端不发 response.done 而直接关 WebSocket，只等 complete_event 会长时间无输出。
+    max_wait_sec 不宜过大：实时解说队列否则会积压，表现为「播一段就长时间无声」。
     """
-    deadline = time.monotonic() + 120.0
+    max_wait_sec = max(3.0, min(120.0, float(max_wait_sec)))
+    close_wait = min(45.0, max_wait_sec + 15.0)
+    deadline = time.monotonic() + max_wait_sec
     next_hb = time.monotonic() + 5.0
     while time.monotonic() < deadline:
         if cb.complete_event.is_set() or cb.connection_closed_event.is_set():
@@ -638,7 +684,10 @@ def _wait_realtime_tts_after_finish(rt: object, cb: NarrationRealtimeTtsCallback
 
     if not cb.connection_closed_event.is_set():
         if not cb.complete_event.is_set():
-            print("  [TTS] 仍未结束，尝试关闭 WebSocket…", flush=True)
+            print(
+                "  [TTS] {:.0f}s 内未收到结束信号，强制关闭 WebSocket 以免阻塞后续播报".format(max_wait_sec),
+                flush=True,
+            )
             recent = cb.recent_event_types()
             if recent:
                 print("  [TTS] 已收到的 type 序列（节选）: {}".format(recent[-15:]), flush=True)
@@ -653,14 +702,14 @@ def _wait_realtime_tts_after_finish(rt: object, cb: NarrationRealtimeTtsCallback
         except Exception:
             pass
 
-    ok = cb.wait_until_connection_closed(timeout=120.0)
+    ok = cb.wait_until_connection_closed(timeout=close_wait)
     if not ok:
         print("  [TTS] 等待 WebSocket 关闭超时，再次 close", flush=True)
         try:
             rt.close()  # type: ignore[attr-defined]
         except Exception:
             pass
-        cb.wait_until_connection_closed(timeout=25.0)
+        cb.wait_until_connection_closed(timeout=min(25.0, close_wait))
         ok = cb.connection_closed_event.is_set()
     return ok
 
@@ -680,6 +729,8 @@ def narration_realtime_play_text_chunks(
     tts_instruction: str,
     chunk_chars: int = 4,
     chunk_delay_sec: float = 0.02,
+    shared_pcm_player: StreamPcmPlayer | None = None,
+    finish_wait_sec: float = 20.0,
 ) -> dict:
     """
     单次解说：将已确定的文本分块 append 到实时 TTS（用于重写后的解说等）。
@@ -694,7 +745,7 @@ def narration_realtime_play_text_chunks(
         raise RuntimeError("缺少环境变量 DASHSCOPE_API_KEY")
     dashscope.api_key = api_key
 
-    cb = NarrationRealtimeTtsCallback()
+    cb = NarrationRealtimeTtsCallback(shared_pcm_player=shared_pcm_player)
     model = _realtime_tts_model_name(tts_instruction)
     rt = QwenTtsRealtime(model=model, callback=cb, url=_REALTIME_TTS_URL)
     rt.connect()
@@ -712,7 +763,7 @@ def narration_realtime_play_text_chunks(
             time.sleep(chunk_delay_sec)
     cb.mark_finish_sent()
     rt.finish()
-    if not _wait_realtime_tts_after_finish(rt, cb):
+    if not _wait_realtime_tts_after_finish(rt, cb, max_wait_sec=finish_wait_sec):
         meta["warn"] = "连接关闭等待超时"
     meta["first_audio_delay_ms"] = rt.get_first_audio_delay()
     meta["session_id"] = rt.get_session_id()
@@ -733,6 +784,7 @@ def main() -> None:
     parser.add_argument(
         "--zmq-endpoint",
         default="tcp://192.168.31.145:5557",
+        # default="tcp://localhost:5557",
         help="ZMQ PUB 地址（默认与 zmqtest.py 一致）",
     )
     parser.add_argument(
@@ -754,7 +806,16 @@ def main() -> None:
         default=_ROOT / "qwen-to-date-prompts.json",
         help="提示词 JSON（system、user_note、可选 forbidden/final_only/revision_system）",
     )
-    parser.add_argument("--batch-size", type=int, default=10, help="每多少行事件调用一次模型")
+    parser.add_argument(
+        "-b",
+        "--batch-size",
+        "--events-per-summary",
+        type=int,
+        default=_env_int("QWEN_EVENTS_BATCH", 10),
+        metavar="N",
+        help="每累积 N 条事件做一次解说总结（调用模型与 TTS）；"
+        "也可用环境变量 QWEN_EVENTS_BATCH 设置默认 N（未传 -b/--batch-size 时生效）",
+    )
     parser.add_argument(
         "--no-audio",
         action="store_true",
@@ -772,7 +833,18 @@ def main() -> None:
         default="用特别激情高昂的语气，适合解说比赛",
         help="实时 TTS 为 session.instructions；URL 回退时为 MultiModalConversation 的 instruction",
     )
+    parser.add_argument(
+        "--realtime-tts-finish-wait",
+        type=float,
+        default=_env_float("QWEN_REALTIME_TTS_WAIT", 20.0, minimum=3.0, maximum=120.0),
+        metavar="SEC",
+        help="实时 TTS：finish 后等待服务端结束/关连接的最长时间（秒），超时强制 close，"
+        "避免阻塞后续播报；默认 20。环境变量 QWEN_REALTIME_TTS_WAIT 可设默认值。",
+    )
     args = parser.parse_args()
+    args.realtime_tts_finish_wait = max(
+        3.0, min(120.0, float(args.realtime_tts_finish_wait))
+    )
 
     prompts = load_prompts(args.prompts)
     schema_obj = json.loads(args.schema.read_text(encoding="utf-8"))
@@ -818,6 +890,11 @@ def main() -> None:
         print(
             "语音合成模式: 实时合成（DashScope QwenTtsRealtime WebSocket，"
             "qwen3-tts-instruct-flash-realtime / qwen3-tts-flash-realtime）",
+            flush=True,
+        )
+        print(
+            "实时 TTS：finish 后最长等待 {:.0f}s，超时强制进入下一段（`--realtime-tts-finish-wait` / "
+            "环境变量 QWEN_REALTIME_TTS_WAIT）".format(args.realtime_tts_finish_wait),
             flush=True,
         )
     else:
@@ -936,43 +1013,51 @@ def main() -> None:
         tts_queue: queue.Queue[tuple[int, str, str, str] | None] = queue.Queue()
 
         def tts_worker() -> None:
-            while True:
-                job = tts_queue.get()
-                try:
-                    if job is None:
-                        return
-                    bi, narration_text, voice, tts_inst = job
-                    tts_kind = "实时合成" if sd is not None else "非实时合成"
-                    print(f"[TTS 线程] 批次 {bi} 开始（{tts_kind}）…", flush=True)
+            shared_pcm: StreamPcmPlayer | None = StreamPcmPlayer() if sd is not None else None
+            try:
+                while True:
+                    job = tts_queue.get()
                     try:
-                        if sd is not None:
-                            meta = narration_realtime_play_text_chunks(
-                                narration_text,
-                                voice=voice,
-                                tts_instruction=tts_inst,
-                            )
-                            with results_lock:
-                                results[bi]["tts_realtime"] = meta
-                                results[bi]["tts_playback"] = "realtime_tts_thread"
-                                persist_results()
-                        else:
-                            audio_url, tts_payload = narration_dashscope_tts_audio_url(
-                                narration_text,
-                                voice=voice,
-                                instruction=tts_inst,
-                            )
-                            with results_lock:
-                                results[bi]["tts_url"] = audio_url
-                                rid = tts_payload.get("request_id")
-                                if rid:
-                                    results[bi]["tts_request_id"] = rid
-                                results[bi]["tts_playback"] = "url_tts_thread"
-                                persist_results()
-                            play_audio_url(audio_url)
-                    except Exception as exc:
-                        print(f"[TTS 线程] 批次 {bi} 解说音频失败: {exc}", flush=True)
-                finally:
-                    tts_queue.task_done()
+                        if job is None:
+                            return
+                        bi, narration_text, voice, tts_inst = job
+                        tts_kind = "实时合成" if sd is not None else "非实时合成"
+                        print(f"[TTS 线程] 批次 {bi} 开始（{tts_kind}）…", flush=True)
+                        try:
+                            if sd is not None:
+                                assert shared_pcm is not None
+                                meta = narration_realtime_play_text_chunks(
+                                    narration_text,
+                                    voice=voice,
+                                    tts_instruction=tts_inst,
+                                    shared_pcm_player=shared_pcm,
+                                    finish_wait_sec=args.realtime_tts_finish_wait,
+                                )
+                                with results_lock:
+                                    results[bi]["tts_realtime"] = meta
+                                    results[bi]["tts_playback"] = "realtime_tts_thread"
+                                    persist_results()
+                            else:
+                                audio_url, tts_payload = narration_dashscope_tts_audio_url(
+                                    narration_text,
+                                    voice=voice,
+                                    instruction=tts_inst,
+                                )
+                                with results_lock:
+                                    results[bi]["tts_url"] = audio_url
+                                    rid = tts_payload.get("request_id")
+                                    if rid:
+                                        results[bi]["tts_request_id"] = rid
+                                    results[bi]["tts_playback"] = "url_tts_thread"
+                                    persist_results()
+                                play_audio_url(audio_url)
+                        except Exception as exc:
+                            print(f"[TTS 线程] 批次 {bi} 解说音频失败: {exc}", flush=True)
+                    finally:
+                        tts_queue.task_done()
+            finally:
+                if shared_pcm is not None:
+                    shared_pcm.close()
 
         def gen_worker() -> None:
             try:
