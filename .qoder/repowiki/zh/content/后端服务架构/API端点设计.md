@@ -11,7 +11,8 @@
 - [subtitles.json](file://subtitles.json)
 - [requirements.txt](file://requirements.txt)
 - [ttstest.py](file://ttstest.py)
-- [qwen-to-data0.py](file://qwen-to-data0.py)
+- [qwen-to-data7.py](file://qwen-to-data7.py)
+- [kokoserver.py](file://kokoserver.py)
 </cite>
 
 ## 目录
@@ -30,12 +31,12 @@
 本文件面向Vue3Speech项目的API端点设计，提供全面的接口文档，涵盖：
 - 批量音频识别端点：文件上传、格式转换与错误处理
 - WebSocket端点：连接协议、消息格式与状态管理
-- 语音合成端点：DashScope与Edge TTS的集成方式
+- 语音合成端点：DashScope、Edge TTS与Kokoro TTS的集成方式
 - 字幕配音端点：时间轴处理、变速算法与输出格式
 - 请求示例、响应格式与错误代码说明
 
 ## 项目结构
-项目采用FastAPI作为后端框架，结合Qwen ASR模型与DashScope TTS能力，提供Web演示页面与多种API端点。
+项目采用FastAPI作为后端框架，结合Qwen ASR模型与DashScope、Kokoro TTS能力，提供Web演示页面与多种API端点。
 
 ```mermaid
 graph TB
@@ -43,6 +44,7 @@ subgraph "后端服务"
 S["FastAPI 应用<br/>server.py"]
 E["边缘字幕配音工具<br/>edge_subtitle_voiceover.py"]
 Q["实时TTS流示例<br/>qwen3stream.py"]
+K["Kokoro TTS服务<br/>kokoserver.py"]
 end
 subgraph "前端演示"
 D["演示页面<br/>demo.html"]
@@ -51,6 +53,7 @@ subgraph "外部服务"
 DS["DashScope TTS"]
 ET["Edge TTS"]
 HF["HuggingFace Hub"]
+KK["Kokoro TTS"]
 end
 subgraph "资源文件"
 TV["音色目录<br/>tts_voices_catalog.json"]
@@ -66,6 +69,7 @@ Q --> DS
 S --> TV
 S --> SB
 S --> REQ
+K --> KK
 ```
 
 图表来源
@@ -73,6 +77,7 @@ S --> REQ
 - [edge_subtitle_voiceover.py:1-223](file://edge_subtitle_voiceover.py#L1-L223)
 - [qwen3stream.py:1-196](file://qwen3stream.py#L1-L196)
 - [demo.html:1-685](file://demo.html#L1-L685)
+- [kokoserver.py:1-204](file://kokoserver.py#L1-L204)
 
 章节来源
 - [README.md:1-287](file://README.md#L1-L287)
@@ -83,6 +88,7 @@ S --> REQ
 - Qwen ASR模型：本地或Hub加载，支持批量音频识别与WebSocket实时识别
 - DashScope TTS：HTTP接口与实时WebSocket接口，支持多种音色与指令
 - Edge TTS：音色查询与字幕配音生成，支持变速与静音对齐
+- Kokoro TTS：本地化中文语音合成，支持同步与流式TTS
 - 演示页面：浏览器端录音、实时识别与TTS播放
 
 章节来源
@@ -101,6 +107,8 @@ S --> REQ
 - POST /tts/edge-subtitle-voiceover：字幕配音生成（MP3）
 - POST /tts/edge-subtitle-voiceover/link：字幕配音生成（服务端缓存+链接）
 - GET /tts/edge-voiceover-files/{file_id}：获取缓存的MP3文件
+- **新增** POST /tts/kokoro：Kokoro TTS同步合成
+- **新增** POST /tts/kokoro/stream：Kokoro TTS流式合成
 
 ```mermaid
 sequenceDiagram
@@ -109,6 +117,7 @@ participant API as "FastAPI 应用"
 participant ASR as "Qwen ASR 模型"
 participant TTS as "DashScope TTS"
 participant Edge as "Edge TTS"
+participant Kokoro as "Kokoro TTS"
 participant FS as "文件系统"
 Client->>API : POST /transcribe (multipart/form-data)
 API->>API : 校验文件与格式
@@ -128,6 +137,13 @@ Client->>API : POST /tts (JSON)
 API->>TTS : MultiModalConversation.call(...)
 TTS-->>API : 响应
 API-->>Client : JSON 响应
+Client->>API : POST /tts/kokoro (JSON)
+API->>Kokoro : generate_audio_file(...)
+Kokoro-->>API : {file_url, duration, synthesis_time}
+API-->>Client : JSON 响应
+Client->>API : POST /tts/kokoro/stream (JSON)
+API->>Kokoro : generate_audio_sse(...)
+Kokoro-->>Client : SSE events (status/progress/complete)
 Client->>API : GET /tts/edge-voices (查询参数)
 API->>Edge : list_voices()
 Edge-->>API : 音色列表
@@ -147,9 +163,9 @@ FS-->>Client : MP3 文件
 - [server.py:124-197](file://server.py#L124-L197)
 - [server.py:212-247](file://server.py#L212-L247)
 - [server.py:256-297](file://server.py#L256-L297)
-- [server.py:300-321](file://server.py#L300-L321)
-- [server.py:324-345](file://server.py#L324-L345)
-- [server.py:348-360](file://server.py#L348-L360)
+- [server.py:300-360](file://server.py#L300-L360)
+- [server.py:367-425](file://server.py#L367-L425)
+- [kokoserver.py:183-194](file://kokoserver.py#L183-L194)
 
 ## 详细组件分析
 
@@ -337,13 +353,81 @@ API-->>Client : FileResponse MP3
 - [server.py:250-253](file://server.py#L250-L253)
 - [tts_voices_catalog.json:1-54](file://tts_voices_catalog.json#L1-L54)
 
+### Kokoro TTS同步合成端点
+- 端点：POST /tts/kokoro
+- 请求类型：application/json
+- 请求体：TTSRequest
+  - text：要合成的文本（必填）
+  - voice：音色标识（默认："zm_yunxia"）
+  - speed：语速倍数（默认：1.0）
+- 响应类型：application/json，结构如下：
+  - file_url：生成音频文件的访问URL
+  - filename：文件名
+  - duration：音频时长（秒）
+  - synthesis_time：合成耗时（秒）
+  - voice：使用的音色
+- 集成方式：
+  - 调用本地Kokoro TTS服务（kokoserver.py）
+  - 支持本地模型与远程HuggingFace模型
+  - 本地音色文件支持.pt格式或voices目录中的音色文件
+- 错误处理：
+  - 500：请求验证失败、模型加载失败、音频生成失败
+
+请求示例
+- curl
+  - curl -X POST "http://127.0.0.1:8000/tts/kokoro" -H "Content-Type: application/json" -d '{"text":"你好世界","voice":"zm_yunxia","speed":1.0}'
+
+响应格式
+- 成功：{"file_url": "...", "filename": "...", "duration": 12.34, "synthesis_time": 5.67, "voice": "zm_yunxia"}
+
+**新增** 章节来源
+- [kokoserver.py:183-189](file://kokoserver.py#L183-L189)
+- [qwen-to-data7.py:647-687](file://qwen-to-data7.py#L647-L687)
+
+### Kokoro TTS流式合成端点
+- 端点：POST /tts/kokoro/stream
+- 请求类型：application/json
+- 请求体：TTSRequest（与同步端点相同）
+- 响应类型：text/event-stream（SSE）
+- SSE事件类型：
+  - status：状态更新
+    - step：初始化阶段（initializing/pipeline/saved）
+    - message：描述信息
+  - progress：进度更新
+    - index：片段索引
+    - segment_samples：片段样本数
+    - partial_duration：片段时长（秒）
+    - message：描述信息
+  - complete：合成完成
+    - file_url：生成音频文件的访问URL
+    - duration：音频总时长（秒）
+    - synthesis_time：合成总耗时（秒）
+  - error：错误信息
+- 集成方式：
+  - 与同步端点相同的Kokoro TTS服务
+  - 实时流式返回合成进度
+- 错误处理：
+  - 500：请求验证失败、模型加载失败、音频生成失败
+
+请求示例
+- curl
+  - curl -N -X POST "http://127.0.0.1:8000/tts/kokoro/stream" -H "Content-Type: application/json" -d '{"text":"你好世界","voice":"zm_yunxia","speed":1.0}'
+
+响应格式
+- 成功：SSE事件流，包含status、progress、complete事件
+
+**新增** 章节来源
+- [kokoserver.py:192-194](file://kokoserver.py#L192-L194)
+- [kokoserver.py:106-155](file://kokoserver.py#L106-L155)
+
 ### 演示页面与前端集成要点
 - 端点：GET /demo
 - 功能：麦克风授权、录音上传识别、实时识别、TTS合成与播放
 - 前端要点：
   - 上传文件到/trascribe
   - WebSocket连接/ws/asr发送PCM16LE帧
-  - POST /tts获取音频URL并播放
+  - POST /tts获取DashScope音频URL并播放
+  - **新增** POST /tts/kokoro获取Kokoro音频URL并播放
 
 章节来源
 - [server.py:199-209](file://server.py#L199-L209)
@@ -356,6 +440,7 @@ API-->>Client : FileResponse MP3
 - qwen-asr：ASR推理
 - dashscope：DashScope TTS与实时TTS
 - edge-tts：Edge TTS音色查询与合成
+- kokoro：Kokoro TTS本地合成
 - pydub：音频处理（变速、拼接）
 - ffmpeg：音频转码与变速
 - python-dotenv：加载.env环境变量
@@ -374,6 +459,8 @@ E["edge_subtitle_voiceover.py"] --> ET
 E --> PD
 E --> FF
 Q["qwen3stream.py"] --> DS
+K["kokoserver.py"] --> KM["kokoro"]
+K --> SF["soundfile"]
 ```
 
 图表来源
@@ -381,6 +468,7 @@ Q["qwen3stream.py"] --> DS
 - [server.py:12-31](file://server.py#L12-L31)
 - [edge_subtitle_voiceover.py:11-13](file://edge_subtitle_voiceover.py#L11-L13)
 - [qwen3stream.py:5-7](file://qwen3stream.py#L5-L7)
+- [kokoserver.py:14](file://kokoserver.py#L14)
 
 章节来源
 - [requirements.txt:1-13](file://requirements.txt#L1-L13)
@@ -391,6 +479,7 @@ Q["qwen3stream.py"] --> DS
 - FFmpeg转码：在WEBM/OGG等格式上进行，确保统一输入格式
 - 并发控制：ASR推理使用锁避免GPU内存竞争
 - 音频变速：使用FFmpeg atempo，支持多级组合以达到目标速度
+- **新增** Kokoro TTS：本地模型加载优化，支持多音色文件格式
 
 ## 故障排除指南
 常见问题与处理：
@@ -399,12 +488,13 @@ Q["qwen3stream.py"] --> DS
 - 缺少DashScope API Key：在.env中设置DASHSCOPE_API_KEY
 - WEBM/OGG转码失败：在.env中设置FFMPEG_PATH指向ffmpeg.exe绝对路径
 - CORS跨域问题：默认允许所有来源，可按需调整
+- **新增** Kokoro TTS模型加载失败：检查KOKORO_LOCAL_MODEL_DIR目录结构和权限
 
 章节来源
 - [README.md:194-204](file://README.md#L194-L204)
 
 ## 结论
-本API设计围绕语音识别与合成两大核心能力，提供REST与WebSocket两种交互模式，满足批量识别、实时流式识别、TTS合成与字幕配音等场景。通过环境变量与配置文件实现灵活部署，配合演示页面展示前端集成方式。
+本API设计围绕语音识别与合成两大核心能力，提供REST与WebSocket两种交互模式，满足批量识别、实时流式识别、TTS合成与字幕配音等场景。通过环境变量与配置文件实现灵活部署，配合演示页面展示前端集成方式。新增的Kokoro TTS端点提供了本地化的中文语音合成能力，支持同步与流式两种模式，丰富了语音合成的选择。
 
 ## 附录
 
@@ -439,6 +529,14 @@ Q["qwen3stream.py"] --> DS
   - 响应：{"path": "...", "url": "...", "file_id": "..."}
 - GET /tts/edge-voiceover-files/{file_id}
   - 响应：FileResponse（MP3）
+- **新增** POST /tts/kokoro
+  - Content-Type：application/json
+  - Body：{"text": "...", "voice": "zm_yunxia", "speed": 1.0}
+  - 响应：{"file_url": "...", "filename": "...", "duration": 12.34, "synthesis_time": 5.67, "voice": "..."}
+- **新增** POST /tts/kokoro/stream
+  - Content-Type：application/json
+  - Body：{"text": "...", "voice": "zm_yunxia", "speed": 1.0}
+  - 响应：SSE事件流（status/progress/complete）
 
 章节来源
 - [README.md:100-147](file://README.md#L100-L147)
@@ -446,3 +544,4 @@ Q["qwen3stream.py"] --> DS
 - [server.py:212-247](file://server.py#L212-L247)
 - [server.py:256-297](file://server.py#L256-L297)
 - [server.py:300-360](file://server.py#L300-L360)
+- [kokoserver.py:183-194](file://kokoserver.py#L183-L194)

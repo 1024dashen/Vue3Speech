@@ -200,6 +200,7 @@ def process_one_batch(
     use_embed_stream = shared_pcm_player is not None
     tts_meta_stream: dict | None = None
     if use_embed_stream:
+        _t0_tts = time.perf_counter()
         model_payload, err, violations, tts_meta_stream = call_qwen_stream_llm_with_realtime_tts(
             schema_obj,
             chunk,
@@ -210,8 +211,19 @@ def process_one_batch(
             shared_pcm_player=shared_pcm_player,
             finish_wait_sec=finish_wait_sec,
         )
+        _tts_sec = time.perf_counter() - _t0_tts
+        print(
+            f"[TTS] 批次 {batch_index} 实时合成完成：总用时（LLM+TTS）{_tts_sec:.2f}s",
+            flush=True,
+        )
     else:
+        _t0_llm = time.perf_counter()
         model_payload, err, violations = call_qwen(schema_obj, chunk, prompts, fragment_meta)
+        _llm_sec = time.perf_counter() - _t0_llm
+        print(
+            f"[解说] 批次 {batch_index} 千问生成完成：用时 {_llm_sec:.2f}s",
+            flush=True,
+        )
     record: dict = {
         "batch_index": batch_index,
         "total_batches": total_batches,
@@ -231,6 +243,7 @@ def process_one_batch(
 
         narration = model_payload["narration"]
         if violations:
+            _t0_rev = time.perf_counter()
             fixed, err2, viol2 = call_qwen_revise(
                 schema_obj,
                 chunk,
@@ -238,6 +251,11 @@ def process_one_batch(
                 fragment_meta,
                 bad_narration=narration,
                 violations=violations,
+            )
+            _rev_sec = time.perf_counter() - _t0_rev
+            print(
+                f"[解说] 批次 {batch_index} 重写完成：用时 {_rev_sec:.2f}s",
+                flush=True,
             )
             record["revision_error"] = err2
             record["revision_model"] = fixed["raw"] if fixed else None
@@ -268,12 +286,18 @@ def process_one_batch(
             record["tts_realtime"] = tts_meta_stream
             if record.get("narration_revised"):
                 try:
+                    _t0_rev = time.perf_counter()
                     record["tts_realtime_revised"] = narration_realtime_play_text_chunks(
                         str(narration).strip(),
                         voice=voice,
                         tts_instruction=tts_instruction,
                         shared_pcm_player=shared_pcm_player,
                         finish_wait_sec=finish_wait_sec,
+                    )
+                    _rev_sec = time.perf_counter() - _t0_rev
+                    print(
+                        f"[TTS] 批次 {batch_index} 重写后实时合成完成：用时 {_rev_sec:.2f}s",
+                        flush=True,
                     )
                 except Exception as exc:
                     print(f"批次 {batch_index} 重写后解说音频失败: {exc}", flush=True)
@@ -1403,27 +1427,44 @@ def main() -> None:
                         print(f"[TTS 线程] 批次 {bi} 开始（{effective_backend}）…", flush=True)
                         try:
                             if effective_backend == "kokoro":
+                                _t0 = time.perf_counter()
                                 audio_url, tts_payload = narration_kokoro_tts_audio_url(
                                     narration_text,
                                     voice=args.kokoro_voice,
                                     speed=args.kokoro_speed,
                                     base_url=args.kokoro_url,
                                 )
+                                _synth_sec = time.perf_counter() - _t0
+                                _audio_dur = tts_payload.get("duration") or 0.0
+                                print(
+                                    f"[TTS] 批次 {bi} Kokoro 合成完成："
+                                    f"合成用时 {_synth_sec:.2f}s，"
+                                    f"音频时长 {_audio_dur:.2f}s",
+                                    flush=True,
+                                )
                                 with results_lock:
                                     results[bi]["tts_url"] = audio_url
-                                    results[bi]["tts_kokoro_duration"] = tts_payload.get("duration")
-                                    results[bi]["tts_kokoro_synthesis_time"] = tts_payload.get("synthesis_time")
+                                    results[bi]["tts_kokoro_duration"] = _audio_dur
+                                    results[bi]["tts_kokoro_synthesis_time"] = round(_synth_sec, 3)
                                     results[bi]["tts_playback"] = "kokoro_tts_thread"
                                     persist_results()
                                 play_audio_url(audio_url)
                             else:  # dashscope
+                                _t0 = time.perf_counter()
                                 audio_url, tts_payload = narration_dashscope_tts_audio_url(
                                     narration_text,
                                     voice=voice,
                                     instruction=tts_inst,
                                 )
+                                _synth_sec = time.perf_counter() - _t0
+                                print(
+                                    f"[TTS] 批次 {bi} DashScope 合成完成："
+                                    f"合成用时 {_synth_sec:.2f}s",
+                                    flush=True,
+                                )
                                 with results_lock:
                                     results[bi]["tts_url"] = audio_url
+                                    results[bi]["tts_synthesis_time"] = round(_synth_sec, 3)
                                     rid = tts_payload.get("request_id")
                                     if rid:
                                         results[bi]["tts_request_id"] = rid
