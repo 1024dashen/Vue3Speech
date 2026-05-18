@@ -4,6 +4,7 @@ import asyncio
 import os
 import subprocess
 import tempfile
+import time
 from edge_tts import Communicate
 from pydub import AudioSegment
 
@@ -94,6 +95,9 @@ async def generate_audio(text, output_path):
     return AudioSegment.from_mp3(output_path)
 
 def main():
+    total_start = time.perf_counter()
+    tts_total_sec = 0.0
+
     # 读取JSON
     with open(INPUT_JSON, 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -111,9 +115,13 @@ def main():
         # 生成原始音频
         temp_path = os.path.join(TEMP_DIR, f"clip_{sub_id}_raw.mp3")
         # 由于edge-tts是异步的，需要同步调用
+        tts_start = time.perf_counter()
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop.run_until_complete(generate_audio(text, temp_path))
+        tts_elapsed = time.perf_counter() - tts_start
+        tts_total_sec += tts_elapsed
+        print(f"  生成声音耗时: {tts_elapsed:.2f}s")
         
         # 加载并获取原始时长
         raw_audio = AudioSegment.from_mp3(temp_path)
@@ -146,8 +154,11 @@ def main():
     
     # 导出最终音频
     final_audio.export(OUTPUT_AUDIO, format="mp3")
+    total_elapsed = time.perf_counter() - total_start
     print(f"\n完成！配音已保存到: {OUTPUT_AUDIO}")
     print(f"总时长: {len(final_audio)}ms")
+    print(f"声音生成总耗时: {tts_total_sec:.2f}s（共 {len(subtitles)} 句）")
+    print(f"全流程总耗时: {total_elapsed:.2f}s（含变速、拼接、导出）")
 
 if __name__ == "__main__":
     main()

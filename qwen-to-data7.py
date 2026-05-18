@@ -10,9 +10,15 @@ import tempfile
 import threading
 import time
 import urllib.request
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 from urllib.parse import urlparse
+
+try:
+    import urllib.error as _urllib_error
+except ImportError:
+    pass
 
 import dashscope
 from dashscope.audio.qwen_tts_realtime import (
@@ -90,6 +96,71 @@ def batched(items: list[dict], n: int):
         yield items[i : i + n]
 
 
+def extract_json_narration_prefix(buffer: str) -> str:
+    """
+    从流式累积的 JSON 文本中解析当前 narration 字符串值（可未完成）。
+    解说为短中文，按 JSON 字符串规则处理反斜杠转义。
+    """
+    key = '"narration"'
+    idx = buffer.find(key)
+    if idx == -1:
+        return ""
+    j = idx + len(key)
+    while j < len(buffer) and buffer[j] in " \t\n\r":
+        j += 1
+    if j >= len(buffer) or buffer[j] != ":":
+        return ""
+    j += 1
+    while j < len(buffer) and buffer[j] in " \t\n\r":
+        j += 1
+    if j >= len(buffer) or buffer[j] != '"':
+        return ""
+    j += 1
+    out: list[str] = []
+    while j < len(buffer):
+        c = buffer[j]
+        if c == "\\":
+            if j + 1 < len(buffer):
+                out.append(buffer[j : j + 2])
+                j += 2
+            else:
+                break
+            continue
+        if c == '"':
+            break
+        out.append(c)
+        j += 1
+    return "".join(out)
+
+
+def _iter_qwen_flash_json_stream(messages: list[dict], *, api_key: str | None) -> Iterator[str]:
+    """流式输出 JSON 文本增量（incremental_output=True）。"""
+    gen = dashscope.Generation.call(
+        api_key=api_key,
+        model="qwen-flash",
+        messages=messages,
+        result_format="message",
+        response_format={"type": "json_object"},
+        stream=True,
+        incremental_output=True,
+    )
+    for resp in gen:
+        if resp.status_code != 200:
+            raise RuntimeError(
+                "千问流式失败 status={}: {}".format(
+                    resp.status_code, getattr(resp, "message", "") or resp
+                )
+            )
+        out = resp.output
+        choices = getattr(out, "choices", None) or []
+        if not choices:
+            continue
+        msg = choices[0].message
+        chunk = (getattr(msg, "content", None) or "") if msg is not None else ""
+        if chunk:
+            yield chunk
+
+
 def process_one_batch(
     chunk: list[dict],
     batch_index: int,
@@ -104,6 +175,8 @@ def process_one_batch(
     results_lock: threading.Lock,
     persist_results: Callable[[], None],
     tts_enqueue: Callable[[int, str, str, str], None] | None,
+    shared_pcm_player: Any | None = None,
+    finish_wait_sec: float = 20.0,
 ) -> None:
     fragment_meta: dict[str, object] = {
         "batch_index": batch_index,
@@ -124,7 +197,21 @@ def process_one_batch(
             flush=True,
         )
 
-    model_payload, err, violations = call_qwen(schema_obj, chunk, prompts, fragment_meta)
+    use_embed_stream = shared_pcm_player is not None
+    tts_meta_stream: dict | None = None
+    if use_embed_stream:
+        model_payload, err, violations, tts_meta_stream = call_qwen_stream_llm_with_realtime_tts(
+            schema_obj,
+            chunk,
+            prompts,
+            fragment_meta,
+            voice=voice,
+            tts_instruction=tts_instruction,
+            shared_pcm_player=shared_pcm_player,
+            finish_wait_sec=finish_wait_sec,
+        )
+    else:
+        model_payload, err, violations = call_qwen(schema_obj, chunk, prompts, fragment_meta)
     record: dict = {
         "batch_index": batch_index,
         "total_batches": total_batches,
@@ -177,12 +264,29 @@ def process_one_batch(
         else:
             print(f"批次 {batch_index}: {narration}")
 
+        if use_embed_stream and tts_meta_stream is not None:
+            record["tts_realtime"] = tts_meta_stream
+            if record.get("narration_revised"):
+                try:
+                    record["tts_realtime_revised"] = narration_realtime_play_text_chunks(
+                        str(narration).strip(),
+                        voice=voice,
+                        tts_instruction=tts_instruction,
+                        shared_pcm_player=shared_pcm_player,
+                        finish_wait_sec=finish_wait_sec,
+                    )
+                except Exception as exc:
+                    print(f"批次 {batch_index} 重写后解说音频失败: {exc}", flush=True)
+            else:
+                record["tts_playback"] = "realtime_llm_stream_embedded"
+
     with results_lock:
         results.append(record)
         persist_results()
 
     if (
-        tts_enqueue is not None
+        not use_embed_stream
+        and tts_enqueue is not None
         and not record.get("error")
         and record.get("narration")
         and str(record["narration"]).strip()
@@ -512,6 +616,66 @@ def play_audio_url(url: str) -> None:
         path.unlink(missing_ok=True)
 
 
+# ----- Kokoro 本地 TTS HTTP 调用（对接 kokoserver.py /tts 接口）-----
+_KOKORO_DEFAULT_URL = os.getenv("KOKORO_TTS_URL", "http://localhost:8000")
+
+
+def narration_kokoro_tts_audio_url(
+    narration: str,
+    *,
+    voice: str = "zm_yunxia",
+    speed: float = 1.0,
+    base_url: str = _KOKORO_DEFAULT_URL,
+    timeout: int = 120,
+) -> tuple[str, dict]:
+    """
+    调用 kokoserver.py 的 POST /tts 接口生成语音，返回 (file_url, 响应 dict)。
+    base_url 默认读取环境变量 KOKORO_TTS_URL，否则为 http://localhost:8000。
+    """
+    text = (narration or "").strip()
+    if not text:
+        raise ValueError("narration 为空")
+
+    endpoint = base_url.rstrip("/") + "/tts"
+    payload = json.dumps(
+        {"text": text, "voice": voice, "speed": speed}, ensure_ascii=False
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        endpoint,
+        data=payload,
+        method="POST",
+        headers={"Content-Type": "application/json", "User-Agent": _TTS_UA},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read()
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(
+            f"Kokoro TTS HTTP 错误 {exc.code}: {exc.read().decode('utf-8', errors='replace')}"
+        ) from exc
+    except Exception as exc:
+        raise RuntimeError(f"Kokoro TTS 请求失败: {exc}") from exc
+
+    result: dict = json.loads(body)
+    file_url: str = result.get("file_url", "").strip()
+    if not file_url:
+        raise RuntimeError(f"Kokoro TTS 响应中无 file_url: {result!r}")
+    return file_url, result
+
+
+def _check_kokoro_available(base_url: str, timeout: int = 5) -> bool:
+    """快速探测 kokoserver 是否可达（GET /），可用返回 True。"""
+    try:
+        req = urllib.request.Request(
+            base_url.rstrip("/") + "/",
+            headers={"User-Agent": _TTS_UA},
+        )
+        with urllib.request.urlopen(req, timeout=timeout):
+            return True
+    except Exception:
+        return False
+
+
 # ----- 与 qwen3stream.py 对齐：实时 PCM 播放 + Qwen 实时 TTS WebSocket -----
 _STREAM_SAMPLE_RATE = 24000
 _STREAM_CHANNELS = 1
@@ -722,6 +886,123 @@ def _realtime_tts_model_name(tts_instruction: str) -> str:
     )
 
 
+def call_qwen_stream_llm_with_realtime_tts(
+    schema_obj: dict,
+    events: list[dict],
+    prompts: dict,
+    fragment_meta: dict,
+    *,
+    voice: str,
+    tts_instruction: str,
+    shared_pcm_player: StreamPcmPlayer | None = None,
+    finish_wait_sec: float = 20.0,
+) -> tuple[dict | None, str | None, list[str], dict]:
+    """
+    与 call_qwen 相同入参；千问流式输出 JSON，边解析 narration 边 append 到实时 TTS 并播放。
+    返回 (model_payload, err, violations, tts_meta)。
+    """
+    tts_meta: dict = {"mode": "realtime_llm_stream", "errors": []}
+    user_obj = {
+        "说明": prompts["user_note"],
+        "fragment_meta": fragment_meta,
+        "fragment_stats": _fragment_stats(events),
+        "forbidden_substrings": prompts["forbidden_substrings"],
+        "forbidden_regexes": prompts["forbidden_regexes"],
+        "final_only_substrings": prompts["final_only_substrings"],
+        "json_schema": schema_obj,
+        "events": events,
+    }
+    user_content = json.dumps(user_obj, ensure_ascii=False, indent=2)
+    messages = [
+        {"role": "system", "content": prompts["system"]},
+        {"role": "user", "content": user_content},
+    ]
+    api_key = os.getenv("DASHSCOPE_API_KEY")
+    if not api_key:
+        return None, "缺少环境变量 DASHSCOPE_API_KEY", [], tts_meta
+
+    dashscope.api_key = api_key
+    cb = NarrationRealtimeTtsCallback(shared_pcm_player=shared_pcm_player)
+    model = _realtime_tts_model_name(tts_instruction)
+    rt: QwenTtsRealtime | None = None
+    buffer = ""
+    spoken = ""
+    try:
+        rt = QwenTtsRealtime(model=model, callback=cb, url=_REALTIME_TTS_URL)
+        print("  正在连接 DashScope 实时 TTS…", flush=True)
+        rt.connect()
+        us: dict = {
+            "voice": voice,
+            "response_format": AudioFormat.PCM_24000HZ_MONO_16BIT,
+            "mode": "server_commit",
+            "language_type": "Chinese",
+        }
+        ins = (tts_instruction or "").strip()
+        if ins:
+            us["instructions"] = ins
+        rt.update_session(**us)
+        print("  实时 TTS 已连接，正在流式请求千问…", flush=True)
+
+        first_llm = True
+        for delta in _iter_qwen_flash_json_stream(messages, api_key=api_key):
+            if first_llm:
+                print("  已收到千问首包，边生成边播音…", flush=True)
+                first_llm = False
+            buffer += delta
+            narr = extract_json_narration_prefix(buffer)
+            if len(narr) > len(spoken):
+                assert rt is not None
+                rt.append_text(narr[len(spoken) :])
+                spoken = narr
+
+        cb.mark_finish_sent()
+        assert rt is not None
+        rt.finish()
+        print("  千问流结束，等待 TTS 收尾…", flush=True)
+        if not _wait_realtime_tts_after_finish(rt, cb, max_wait_sec=finish_wait_sec):
+            tts_meta["errors"].append("连接关闭等待超时")
+        print("  本批 LLM+实时 TTS 完成", flush=True)
+    except Exception as exc:
+        tts_meta["errors"].append(str(exc))
+        if rt is not None:
+            try:
+                rt.finish()
+            except Exception:
+                pass
+            try:
+                rt.close()
+            except Exception:
+                pass
+        try:
+            cb.complete_event.wait(timeout=5.0)
+        except Exception:
+            pass
+        try:
+            cb.wait_until_connection_closed(timeout=5.0)
+        except Exception:
+            pass
+        return None, str(exc), [], tts_meta
+
+    try:
+        data = json.loads(buffer)
+    except json.JSONDecodeError as exc:
+        return None, "JSON 解析失败: {}".format(exc), [], tts_meta
+
+    narration = _clip_narration(data.get("narration") or "")
+    data["narration"] = narration
+    reasons = narration_violations(
+        narration,
+        bool(fragment_meta.get("is_final_batch")),
+        prompts["forbidden_substrings"],
+        prompts["final_only_substrings"],
+        prompts["forbidden_res"],
+    )
+    assert rt is not None
+    tts_meta["first_audio_delay_ms"] = rt.get_first_audio_delay()
+    tts_meta["session_id"] = rt.get_session_id()
+    return {"narration": narration, "raw": data}, None, reasons, tts_meta
+
+
 def narration_realtime_play_text_chunks(
     text: str,
     *,
@@ -754,8 +1035,10 @@ def narration_realtime_play_text_chunks(
         "response_format": AudioFormat.PCM_24000HZ_MONO_16BIT,
         "mode": "server_commit",
         "language_type": "Chinese",
-        "instructions": "用特别激情高昂的语气，适合解说比赛"
     }
+    ins = (tts_instruction or "").strip()
+    if ins:
+        us["instructions"] = ins
     rt.update_session(**us)
     for i in range(0, len(text), max(1, chunk_chars)):
         rt.append_text(text[i : i + chunk_chars])
@@ -841,6 +1124,39 @@ def main() -> None:
         help="实时 TTS：finish 后等待服务端结束/关连接的最长时间（秒），超时强制 close，"
         "避免阻塞后续播报；默认 20。环境变量 QWEN_REALTIME_TTS_WAIT 可设默认值。",
     )
+    parser.add_argument(
+        "--tts-backend",
+        type=str,
+        default=os.getenv("QWEN_TTS_BACKEND", "auto"),
+        choices=["auto", "realtime", "dashscope", "kokoro"],
+        help=(
+            "TTS 后端选择："
+            "auto（自动：有 sounddevice 用 realtime，有 kokoserver 用 kokoro，否则 dashscope）；"
+            "realtime（DashScope 实时 WebSocket，需 sounddevice）；"
+            "dashscope（DashScope qwen3-tts-flash HTTP，不需 sounddevice）；"
+            "kokoro（本地 kokoserver.py /tts 接口）。"
+            "环境变量 QWEN_TTS_BACKEND 可设默认值。"
+        ),
+    )
+    parser.add_argument(
+        "--kokoro-url",
+        type=str,
+        default=os.getenv("KOKORO_TTS_URL", "http://localhost:8000"),
+        help="Kokoro TTS 服务地址（对应 kokoserver.py），默认 http://localhost:8000；"
+             "也可用环境变量 KOKORO_TTS_URL 设置。",
+    )
+    parser.add_argument(
+        "--kokoro-voice",
+        type=str,
+        default=os.getenv("KOKORO_VOICE", "zm_yunxia"),
+        help="Kokoro TTS 音色，默认 zm_yunxia；也可用环境变量 KOKORO_VOICE 设置。",
+    )
+    parser.add_argument(
+        "--kokoro-speed",
+        type=float,
+        default=float(os.getenv("KOKORO_SPEED", "1.0")),
+        help="Kokoro TTS 语速倍率，默认 1.0；也可用环境变量 KOKORO_SPEED 设置。",
+    )
     args = parser.parse_args()
     args.realtime_tts_finish_wait = max(
         3.0, min(120.0, float(args.realtime_tts_finish_wait))
@@ -884,12 +1200,40 @@ def main() -> None:
         )
         print("订阅事件写入:", zmq_events_log_path.resolve(), flush=True)
 
+    # ------------------------------------------------------------------
+    # 确定最终 TTS 后端（resolve effective backend）
+    # ------------------------------------------------------------------
+    effective_backend: str
     if args.no_audio:
+        effective_backend = "none"
+    else:
+        b = args.tts_backend
+        if b == "auto":
+            if sd is not None:
+                effective_backend = "realtime"
+            elif _check_kokoro_available(args.kokoro_url):
+                effective_backend = "kokoro"
+            else:
+                effective_backend = "dashscope"
+        elif b == "realtime" and sd is None:
+            print(
+                "[警告] --tts-backend=realtime 但未安装 sounddevice，自动降级为 dashscope",
+                flush=True,
+            )
+            effective_backend = "dashscope"
+        else:
+            effective_backend = b
+
+    if effective_backend == "none":
         print("语音合成: 已关闭（--no-audio）", flush=True)
-    elif sd is not None:
+    elif effective_backend == "realtime":
         print(
             "语音合成模式: 实时合成（DashScope QwenTtsRealtime WebSocket，"
             "qwen3-tts-instruct-flash-realtime / qwen3-tts-flash-realtime）",
+            flush=True,
+        )
+        print(
+            "千问流式 JSON + 边解析 narration 边实时 TTS（与 qwen-to-data1 一致，降低相对画面的口播滞后）",
             flush=True,
         )
         print(
@@ -897,18 +1241,30 @@ def main() -> None:
             "环境变量 QWEN_REALTIME_TTS_WAIT）".format(args.realtime_tts_finish_wait),
             flush=True,
         )
-    else:
+    elif effective_backend == "kokoro":
+        print(
+            f"语音合成模式: Kokoro 本地 TTS（{args.kokoro_url}，音色 {args.kokoro_voice}，"
+            f"语速 {args.kokoro_speed}）",
+            flush=True,
+        )
+        print(
+            "[提示] Kokoro 后端需预先启动 kokoserver.py；"
+            "pip install sounddevice 后可改用实时 WebSocket 合成",
+            flush=True,
+        )
+    else:  # dashscope
         print(
             "语音合成模式: 非实时合成（DashScope qwen3-tts-flash，整段 HTTP 返回 audio.url）",
             flush=True,
         )
         print(
-            "[提示] pip install sounddevice 后可走实时 WebSocket 合成（本机流式播放）",
+            "[提示] pip install sounddevice 后可走实时 WebSocket 合成（本机流式播放）；"
+            "或用 --tts-backend=kokoro 走本地 Kokoro TTS",
             flush=True,
         )
 
-    results: list[dict] = []
     size = max(1, args.batch_size)
+    results: list[dict] = []
     if events is not None:
         total_batches = (len(events) + size - 1) // size
         print(
@@ -926,6 +1282,8 @@ def main() -> None:
 
     def run_all_batches(
         tts_enqueue: Callable[[int, str, str, str], None] | None,
+        shared_pcm_player: Any | None,
+        finish_wait_sec: float,
     ) -> None:
         assert events is not None
         tb = (len(events) + size - 1) // size
@@ -944,10 +1302,14 @@ def main() -> None:
                 results_lock=results_lock,
                 persist_results=persist_results,
                 tts_enqueue=tts_enqueue,
+                shared_pcm_player=shared_pcm_player,
+                finish_wait_sec=finish_wait_sec,
             )
 
     def run_zmq_batches(
         tts_enqueue: Callable[[int, str, str, str], None] | None,
+        shared_pcm_player: Any | None,
+        finish_wait_sec: float,
     ) -> None:
         assert zmq_socket is not None
         buffer: list[dict] = []
@@ -980,6 +1342,8 @@ def main() -> None:
                         results_lock=results_lock,
                         persist_results=persist_results,
                         tts_enqueue=tts_enqueue,
+                        shared_pcm_player=shared_pcm_player,
+                        finish_wait_sec=finish_wait_sec,
                     )
                     batch_index += 1
         except KeyboardInterrupt:
@@ -998,6 +1362,8 @@ def main() -> None:
                     results_lock=results_lock,
                     persist_results=persist_results,
                     tts_enqueue=tts_enqueue,
+                    shared_pcm_player=shared_pcm_player,
+                    finish_wait_sec=finish_wait_sec,
                 )
         finally:
             zmq_socket.close(linger=0)
@@ -1005,19 +1371,28 @@ def main() -> None:
 
     def generation_driver(
         tts_enqueue: Callable[[int, str, str, str], None] | None,
+        shared_pcm_player: Any | None,
+        finish_wait_sec: float,
     ) -> None:
         if events is not None:
-            run_all_batches(tts_enqueue)
+            run_all_batches(tts_enqueue, shared_pcm_player, finish_wait_sec)
         else:
-            run_zmq_batches(tts_enqueue)
+            run_zmq_batches(tts_enqueue, shared_pcm_player, finish_wait_sec)
 
     if args.no_audio:
-        generation_driver(None)
+        generation_driver(None, None, args.realtime_tts_finish_wait)
+    elif effective_backend == "realtime":
+        embed_pcm = StreamPcmPlayer()
+        try:
+            print("解说生成与语音：同线程串行（流式 LLM 与实时 TTS 交织，无单独 TTS 队列）", flush=True)
+            generation_driver(None, embed_pcm, args.realtime_tts_finish_wait)
+        finally:
+            embed_pcm.close()
     else:
+        # kokoro 或 dashscope 非实时回退路径
         tts_queue: queue.Queue[tuple[int, str, str, str] | None] = queue.Queue()
 
         def tts_worker() -> None:
-            shared_pcm: StreamPcmPlayer | None = StreamPcmPlayer() if sd is not None else None
             try:
                 while True:
                     job = tts_queue.get()
@@ -1025,23 +1400,23 @@ def main() -> None:
                         if job is None:
                             return
                         bi, narration_text, voice, tts_inst = job
-                        tts_kind = "实时合成" if sd is not None else "非实时合成"
-                        print(f"[TTS 线程] 批次 {bi} 开始（{tts_kind}）…", flush=True)
+                        print(f"[TTS 线程] 批次 {bi} 开始（{effective_backend}）…", flush=True)
                         try:
-                            if sd is not None:
-                                assert shared_pcm is not None
-                                meta = narration_realtime_play_text_chunks(
+                            if effective_backend == "kokoro":
+                                audio_url, tts_payload = narration_kokoro_tts_audio_url(
                                     narration_text,
-                                    voice=voice,
-                                    tts_instruction=tts_inst,
-                                    shared_pcm_player=shared_pcm,
-                                    finish_wait_sec=args.realtime_tts_finish_wait,
+                                    voice=args.kokoro_voice,
+                                    speed=args.kokoro_speed,
+                                    base_url=args.kokoro_url,
                                 )
                                 with results_lock:
-                                    results[bi]["tts_realtime"] = meta
-                                    results[bi]["tts_playback"] = "realtime_tts_thread"
+                                    results[bi]["tts_url"] = audio_url
+                                    results[bi]["tts_kokoro_duration"] = tts_payload.get("duration")
+                                    results[bi]["tts_kokoro_synthesis_time"] = tts_payload.get("synthesis_time")
+                                    results[bi]["tts_playback"] = "kokoro_tts_thread"
                                     persist_results()
-                            else:
+                                play_audio_url(audio_url)
+                            else:  # dashscope
                                 audio_url, tts_payload = narration_dashscope_tts_audio_url(
                                     narration_text,
                                     voice=voice,
@@ -1060,20 +1435,24 @@ def main() -> None:
                     finally:
                         tts_queue.task_done()
             finally:
-                if shared_pcm is not None:
-                    shared_pcm.close()
+                pass
 
         def gen_worker() -> None:
             try:
                 generation_driver(
                     lambda bi, txt, v, ins: tts_queue.put((bi, txt, v, ins)),
+                    None,
+                    args.realtime_tts_finish_wait,
                 )
             finally:
                 tts_queue.put(None)
 
-        t_tts = threading.Thread(target=tts_worker, name="qwen-to-data3-tts", daemon=False)
-        t_gen = threading.Thread(target=gen_worker, name="qwen-to-data3-gen", daemon=False)
-        print("解说生成与语音合成分别在两个线程中并行执行", flush=True)
+        t_tts = threading.Thread(target=tts_worker, name="qwen-to-data7-tts", daemon=False)
+        t_gen = threading.Thread(target=gen_worker, name="qwen-to-data7-gen", daemon=False)
+        print(
+            f"解说生成与语音合成分别在两个线程中并行执行（{effective_backend} TTS 回退路径）",
+            flush=True,
+        )
         t_tts.start()
         t_gen.start()
         t_gen.join()
