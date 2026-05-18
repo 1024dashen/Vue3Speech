@@ -1434,18 +1434,20 @@ def main() -> None:
                                     speed=args.kokoro_speed,
                                     base_url=args.kokoro_url,
                                 )
-                                _synth_sec = time.perf_counter() - _t0
+                                _http_sec = time.perf_counter() - _t0
                                 _audio_dur = tts_payload.get("duration") or 0.0
+                                _server_synth_sec = tts_payload.get("synthesis_time") or 0.0
                                 print(
                                     f"[TTS] 批次 {bi} Kokoro 合成完成："
-                                    f"合成用时 {_synth_sec:.2f}s，"
+                                    f"HTTP往返 {_http_sec:.2f}s（服务端推理 {_server_synth_sec:.2f}s），"
                                     f"音频时长 {_audio_dur:.2f}s",
                                     flush=True,
                                 )
                                 with results_lock:
                                     results[bi]["tts_url"] = audio_url
                                     results[bi]["tts_kokoro_duration"] = _audio_dur
-                                    results[bi]["tts_kokoro_synthesis_time"] = round(_synth_sec, 3)
+                                    results[bi]["tts_kokoro_synthesis_time"] = _server_synth_sec
+                                    results[bi]["tts_kokoro_http_time"] = round(_http_sec, 3)
                                     results[bi]["tts_playback"] = "kokoro_tts_thread"
                                     persist_results()
                                 play_audio_url(audio_url)

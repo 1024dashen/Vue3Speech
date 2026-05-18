@@ -2,6 +2,7 @@ import json
 import os
 import time
 import uuid
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -13,15 +14,22 @@ from pydantic import BaseModel
 
 from kokoro import KModel, KPipeline
 
-HOST = "0.0.0.0"
-PORT = 8000
+HOST = os.getenv("KOKORO_HOST", "0.0.0.0")
+PORT = int(os.getenv("KOKORO_PORT", "8000"))
 STATIC_DIR = "static"
 BASE_URL = f"http://localhost:{PORT}"
 REPO_ID = os.getenv("KOKORO_REPO_ID", "hexgrad/Kokoro-82M")
-LOCAL_MODEL_DIR = os.getenv("KOKORO_LOCAL_MODEL_DIR", "kokoro_model")
-LOCAL_VOICE_DIR = os.getenv("KOKORO_LOCAL_VOICE_DIR", os.path.join(LOCAL_MODEL_DIR, "voices"))
+LOCAL_MODEL_DIR = Path(os.getenv("KOKORO_LOCAL_MODEL_DIR", "kokoro_model"))
+LOCAL_VOICE_DIR = Path(os.getenv("KOKORO_LOCAL_VOICE_DIR", str(LOCAL_MODEL_DIR / "voices")))
+
+# model.pth 候选文件名（与 KModel.MODEL_NAMES 一致）
+_MODEL_FILENAME_MAP: dict[str, str] = {
+    "hexgrad/Kokoro-82M": "kokoro-v1_0.pth",
+    "hexgrad/Kokoro-82M-v1.1-zh": "kokoro-v1_1-zh.pth",
+}
 
 app = FastAPI(title="Kokoro TTS API")
+os.makedirs(STATIC_DIR, exist_ok=True)
 app.mount("/files", StaticFiles(directory=STATIC_DIR), name="files")
 
 pipeline: Optional[KPipeline] = None
@@ -51,24 +59,55 @@ def sse_event(event_name: str, payload: dict) -> str:
 
 
 def resolve_voice_path(voice: str) -> str:
-    if voice.endswith('.pt'):
+    if voice.endswith(".pt"):
         return voice
-    local_voice_path = os.path.join(LOCAL_VOICE_DIR, f"{voice}.pt")
-    if os.path.isfile(local_voice_path):
-        return local_voice_path
-    return voice
+    local_voice_path = LOCAL_VOICE_DIR / f"{voice}.pt"
+    if local_voice_path.is_file():
+        return str(local_voice_path)
+    # 本地没有则尝试从 HF 下载到本地
+    try:
+        from huggingface_hub import hf_hub_download
+        print(f"正在从 HuggingFace 下载音色文件: voices/{voice}.pt")
+        downloaded = hf_hub_download(
+            repo_id=REPO_ID,
+            filename=f"voices/{voice}.pt",
+            local_dir=str(LOCAL_MODEL_DIR),
+        )
+        return downloaded
+    except Exception as exc:
+        print(f"音色下载失败，回退为音色名: {exc}")
+        return voice
 
 
-def load_local_model() -> Optional[KModel]:
-    config_file = os.path.join(LOCAL_MODEL_DIR, "config.json")
-    candidate_files = [
-        os.path.join(LOCAL_MODEL_DIR, "kokoro-v1_0.pth"),
-        os.path.join(LOCAL_MODEL_DIR, "kokoro-v1_1-zh.pth"),
-    ]
-    model_file = next((p for p in candidate_files if os.path.isfile(p)), None)
-    if config_file and model_file and os.path.isfile(config_file):
-        return KModel(repo_id=REPO_ID, config=config_file, model=model_file)
-    return None
+def ensure_local_model() -> KModel:
+    """
+    优先使用本地文件（LOCAL_MODEL_DIR/config.json + *.pth）加载模型。
+    如果本地文件不完整，自动用 hf_hub_download 下载到 LOCAL_MODEL_DIR 后再加载。
+    """
+    LOCAL_MODEL_DIR.mkdir(parents=True, exist_ok=True)
+    LOCAL_VOICE_DIR.mkdir(parents=True, exist_ok=True)
+
+    config_path = LOCAL_MODEL_DIR / "config.json"
+    model_filename = _MODEL_FILENAME_MAP.get(REPO_ID, "kokoro-v1_0.pth")
+    model_path = LOCAL_MODEL_DIR / model_filename
+
+    from huggingface_hub import hf_hub_download
+
+    if not config_path.is_file():
+        print(f"本地未找到 config.json，开始从 HuggingFace 下载（repo={REPO_ID}）...")
+        hf_hub_download(repo_id=REPO_ID, filename="config.json", local_dir=str(LOCAL_MODEL_DIR))
+        print(f"已下载 config.json 到 {LOCAL_MODEL_DIR}")
+    else:
+        print(f"使用本地 config.json: {config_path}")
+
+    if not model_path.is_file():
+        print(f"本地未找到 {model_filename}，开始从 HuggingFace 下载（文件较大，请耐心等待）...")
+        hf_hub_download(repo_id=REPO_ID, filename=model_filename, local_dir=str(LOCAL_MODEL_DIR))
+        print(f"已下载 {model_filename} 到 {LOCAL_MODEL_DIR}")
+    else:
+        print(f"使用本地模型: {model_path}")
+
+    return KModel(repo_id=REPO_ID, config=str(config_path), model=str(model_path))
 
 
 def generate_audio_file(text: str, voice: str, speed: float) -> dict:
@@ -160,13 +199,10 @@ def on_startup() -> None:
     global pipeline
     ensure_static_dir()
     print(f"正在初始化中文语音管线... ({BASE_URL})")
-    local_model = load_local_model()
-    if local_model is not None:
-        print(f"使用本地模型目录: {LOCAL_MODEL_DIR}")
-        pipeline = KPipeline(lang_code="z", model=local_model, repo_id=REPO_ID)
-    else:
-        print("未找到本地模型文件，尝试使用远程 Hugging Face 模型。")
-        pipeline = KPipeline(lang_code="z", repo_id=REPO_ID)
+    local_model = ensure_local_model()
+    print(f"模型加载完成，正在初始化 KPipeline (lang_code=z)...")
+    pipeline = KPipeline(lang_code="z", model=local_model, repo_id=REPO_ID)
+    print("语音管线就绪，服务已就绪。")
 
 
 @app.get("/", response_class=HTMLResponse)
