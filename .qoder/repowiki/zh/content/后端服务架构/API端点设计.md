@@ -72,14 +72,14 @@ S --> REQ
 K --> KK
 ```
 
-图表来源
+**图表来源**
 - [server.py:1-452](file://server.py#L1-L452)
 - [edge_subtitle_voiceover.py:1-223](file://edge_subtitle_voiceover.py#L1-L223)
 - [qwen3stream.py:1-196](file://qwen3stream.py#L1-L196)
 - [demo.html:1-685](file://demo.html#L1-L685)
-- [kokoserver.py:1-204](file://kokoserver.py#L1-L204)
+- [kokoserver.py:1-240](file://kokoserver.py#L1-L240)
 
-章节来源
+**章节来源**
 - [README.md:1-287](file://README.md#L1-L287)
 - [requirements.txt:1-13](file://requirements.txt#L1-L13)
 
@@ -91,7 +91,7 @@ K --> KK
 - Kokoro TTS：本地化中文语音合成，支持同步与流式TTS
 - 演示页面：浏览器端录音、实时识别与TTS播放
 
-章节来源
+**章节来源**
 - [server.py:67-95](file://server.py#L67-L95)
 - [README.md:100-193](file://README.md#L100-L193)
 
@@ -143,7 +143,7 @@ Kokoro-->>API : {file_url, duration, synthesis_time}
 API-->>Client : JSON 响应
 Client->>API : POST /tts/kokoro/stream (JSON)
 API->>Kokoro : generate_audio_sse(...)
-Kokoro-->>Client : SSE events (status/progress/complete)
+Kokoro-->>API : SSE events (status/progress/complete)
 Client->>API : GET /tts/edge-voices (查询参数)
 API->>Edge : list_voices()
 Edge-->>API : 音色列表
@@ -159,7 +159,7 @@ API->>FS : FileResponse(mp3)
 FS-->>Client : MP3 文件
 ```
 
-图表来源
+**图表来源**
 - [server.py:124-197](file://server.py#L124-L197)
 - [server.py:212-247](file://server.py#L212-L247)
 - [server.py:256-297](file://server.py#L256-L297)
@@ -183,14 +183,14 @@ FS-->>Client : MP3 文件
   - 400：缺少文件名、空文件、格式不支持、FFmpeg转码失败
   - 500：转码异常、ASR推理失败
 
-请求示例
+**请求示例**
 - curl
   - curl -X POST "http://127.0.0.1:8000/transcribe" -F "file=@录音.webm"
 
-响应格式
+**响应格式**
 - 成功：{"language": "...", "text": "..."}
 
-章节来源
+**章节来源**
 - [server.py:367-425](file://server.py#L367-L425)
 - [README.md:114-118](file://README.md#L114-L118)
 
@@ -229,10 +229,10 @@ Cleanup --> Loop
 Loop --> |断开| End(["连接关闭"])
 ```
 
-图表来源
+**图表来源**
 - [server.py:124-197](file://server.py#L124-L197)
 
-章节来源
+**章节来源**
 - [server.py:124-197](file://server.py#L124-L197)
 - [README.md:120-128](file://README.md#L120-L128)
 
@@ -249,14 +249,14 @@ Loop --> |断开| End(["连接关闭"])
   - 400：缺少API Key
   - 500：SDK调用异常
 
-请求示例
+**请求示例**
 - curl
   - curl -X POST "http://127.0.0.1:8000/tts" -H "Content-Type: application/json" -d '{"text":"你好","voice":"Cherry"}'
 
-响应格式
+**响应格式**
 - 成功：DashScope标准响应（通常包含output.audio.url或output.audio.data）
 
-章节来源
+**章节来源**
 - [server.py:212-247](file://server.py#L212-L247)
 - [README.md:139-147](file://README.md#L139-L147)
 - [ttstest.py:13-26](file://ttstest.py#L13-L26)
@@ -269,11 +269,11 @@ Loop --> |断开| End(["连接关闭"])
 - 响应：{"count": N, "voices": [...]}
 - 集成方式：实时调用edge-tts的list_voices()
 
-请求示例
+**请求示例**
 - curl
   - curl "http://127.0.0.1:8000/tts/edge-voices?locale=zh-CN&gender=Female"
 
-章节来源
+**章节来源**
 - [server.py:256-297](file://server.py#L256-L297)
 
 ### 字幕配音生成端点
@@ -293,11 +293,11 @@ Loop --> |断开| End(["连接关闭"])
   - 400：字幕内容为空、参数非法
   - 500：FFmpeg不可用、TTS合成失败、内部异常
 
-请求示例
+**请求示例**
 - curl
   - curl -X POST "http://127.0.0.1:8000/tts/edge-subtitle-voiceover" -H "Content-Type: application/json" -d '{"voice":"zh-CN-YunxiNeural","subtitles":[{"id":1,"start_time":1000,"end_time":5000,"content":"大家要学习的内容是字幕一键生成配音"}]}'
 
-响应格式
+**响应格式**
 - 成功：FileResponse（MP3）
 
 ```mermaid
@@ -319,11 +319,11 @@ API->>FS : 导出最终MP3
 API-->>Client : FileResponse MP3
 ```
 
-图表来源
+**图表来源**
 - [server.py:300-321](file://server.py#L300-L321)
 - [edge_subtitle_voiceover.py:166-222](file://edge_subtitle_voiceover.py#L166-L222)
 
-章节来源
+**章节来源**
 - [server.py:300-321](file://server.py#L300-L321)
 - [edge_subtitle_voiceover.py:166-222](file://edge_subtitle_voiceover.py#L166-L222)
 
@@ -336,11 +336,11 @@ API-->>Client : FileResponse MP3
 - 环境变量：
   - PUBLIC_BASE_URL：用于生成绝对链接（反向代理部署时推荐设置）
 
-请求示例
+**请求示例**
 - curl
   - curl -X POST "http://127.0.0.1:8000/tts/edge-subtitle-voiceover/link" -H "Content-Type: application/json" -d '{"voice":"zh-CN-YunxiNeural","subtitles":[{"id":1,"start_time":1000,"end_time":5000,"content":"大家要学习的内容是字幕一键生成配音"}]}'
 
-章节来源
+**章节来源**
 - [server.py:324-345](file://server.py#L324-L345)
 - [server.py:348-360](file://server.py#L348-L360)
 
@@ -349,7 +349,7 @@ API-->>Client : FileResponse MP3
 - 响应：来自tts_voices_catalog.json的数据
 - 用途：前端选择音色时的参考
 
-章节来源
+**章节来源**
 - [server.py:250-253](file://server.py#L250-L253)
 - [tts_voices_catalog.json:1-54](file://tts_voices_catalog.json#L1-L54)
 
@@ -373,11 +373,11 @@ API-->>Client : FileResponse MP3
 - 错误处理：
   - 500：请求验证失败、模型加载失败、音频生成失败
 
-请求示例
+**请求示例**
 - curl
   - curl -X POST "http://127.0.0.1:8000/tts/kokoro" -H "Content-Type: application/json" -d '{"text":"你好世界","voice":"zm_yunxia","speed":1.0}'
 
-响应格式
+**响应格式**
 - 成功：{"file_url": "...", "filename": "...", "duration": 12.34, "synthesis_time": 5.67, "voice": "zm_yunxia"}
 
 **新增** 章节来源
@@ -409,11 +409,11 @@ API-->>Client : FileResponse MP3
 - 错误处理：
   - 500：请求验证失败、模型加载失败、音频生成失败
 
-请求示例
+**请求示例**
 - curl
   - curl -N -X POST "http://127.0.0.1:8000/tts/kokoro/stream" -H "Content-Type: application/json" -d '{"text":"你好世界","voice":"zm_yunxia","speed":1.0}'
 
-响应格式
+**响应格式**
 - 成功：SSE事件流，包含status、progress、complete事件
 
 **新增** 章节来源
@@ -429,7 +429,7 @@ API-->>Client : FileResponse MP3
   - POST /tts获取DashScope音频URL并播放
   - **新增** POST /tts/kokoro获取Kokoro音频URL并播放
 
-章节来源
+**章节来源**
 - [server.py:199-209](file://server.py#L199-L209)
 - [demo.html:1-685](file://demo.html#L1-L685)
 - [README.md:151-182](file://README.md#L151-L182)
@@ -463,14 +463,14 @@ K["kokoserver.py"] --> KM["kokoro"]
 K --> SF["soundfile"]
 ```
 
-图表来源
+**图表来源**
 - [requirements.txt:1-13](file://requirements.txt#L1-L13)
 - [server.py:12-31](file://server.py#L12-L31)
 - [edge_subtitle_voiceover.py:11-13](file://edge_subtitle_voiceover.py#L11-L13)
 - [qwen3stream.py:5-7](file://qwen3stream.py#L5-L7)
 - [kokoserver.py:14](file://kokoserver.py#L14)
 
-章节来源
+**章节来源**
 - [requirements.txt:1-13](file://requirements.txt#L1-L13)
 
 ## 性能考虑
@@ -490,7 +490,7 @@ K --> SF["soundfile"]
 - CORS跨域问题：默认允许所有来源，可按需调整
 - **新增** Kokoro TTS模型加载失败：检查KOKORO_LOCAL_MODEL_DIR目录结构和权限
 
-章节来源
+**章节来源**
 - [README.md:194-204](file://README.md#L194-L204)
 
 ## 结论
@@ -538,7 +538,7 @@ K --> SF["soundfile"]
   - Body：{"text": "...", "voice": "zm_yunxia", "speed": 1.0}
   - 响应：SSE事件流（status/progress/complete）
 
-章节来源
+**章节来源**
 - [README.md:100-147](file://README.md#L100-L147)
 - [server.py:124-197](file://server.py#L124-L197)
 - [server.py:212-247](file://server.py#L212-L247)

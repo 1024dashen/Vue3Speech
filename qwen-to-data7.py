@@ -10,6 +10,7 @@ import tempfile
 import threading
 import time
 import urllib.request
+import uuid
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Callable
@@ -19,6 +20,22 @@ try:
     import urllib.error as _urllib_error
 except ImportError:
     pass
+
+try:
+    import numpy as np
+except ImportError:
+    np = None  # type: ignore[misc, assignment]
+
+try:
+    import soundfile as sf
+except ImportError:
+    sf = None  # type: ignore[misc, assignment]
+
+try:
+    from kokoro import KModel, KPipeline
+    _kokoro_available = True
+except ImportError:
+    _kokoro_available = False
 
 import dashscope
 from dashscope.audio.qwen_tts_realtime import (
@@ -38,6 +55,17 @@ load_dotenv()
 _TTS_UA = "Mozilla/5.0 (compatible; qwen-to-date/1.0)"
 
 _ROOT = Path(__file__).resolve().parent
+
+# ----- Kokoro 本地模型路径 -----
+_KOKORO_REPO_ID = os.getenv("KOKORO_REPO_ID", "hexgrad/Kokoro-82M")
+_KOKORO_LOCAL_MODEL_DIR = Path(os.getenv("KOKORO_LOCAL_MODEL_DIR", str(_ROOT / "kokoro_model")))
+_KOKORO_LOCAL_VOICE_DIR = Path(os.getenv("KOKORO_LOCAL_VOICE_DIR", str(_KOKORO_LOCAL_MODEL_DIR / "voices")))
+_KOKORO_OUTPUT_DIR = _ROOT / "kokoro_output"
+
+_KOKORO_MODEL_FILENAME_MAP: dict[str, str] = {
+    "hexgrad/Kokoro-82M": "kokoro-v1_0.pth",
+    "hexgrad/Kokoro-82M-v1.1-zh": "kokoro-v1_1-zh.pth",
+}
 
 
 def load_prompts(path: Path) -> dict:
@@ -640,64 +668,120 @@ def play_audio_url(url: str) -> None:
         path.unlink(missing_ok=True)
 
 
-# ----- Kokoro 本地 TTS HTTP 调用（对接 kokoserver.py /tts 接口）-----
-_KOKORO_DEFAULT_URL = os.getenv("KOKORO_TTS_URL", "http://localhost:8000")
+def _play_local_wav(path: str | Path) -> None:
+    """播放本地 WAV 文件：优先 ffplay/mpv，否则用 pygame。"""
+    path = str(path)
+    ffplay = shutil.which("ffplay")
+    if ffplay:
+        cmd = [ffplay, "-nodisp", "-autoexit", "-loglevel", "quiet", path]
+        kw: dict = {"timeout": 7200}
+        if os.name == "nt" and hasattr(subprocess, "CREATE_NO_WINDOW"):
+            kw["creationflags"] = subprocess.CREATE_NO_WINDOW
+        try:
+            r = subprocess.run(cmd, **kw)
+            if r.returncode == 0:
+                return
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
 
+    mpv = shutil.which("mpv")
+    if mpv:
+        cmd = [mpv, "--no-video", "--really-quiet", path]
+        kw = {"timeout": 7200}
+        if os.name == "nt" and hasattr(subprocess, "CREATE_NO_WINDOW"):
+            kw["creationflags"] = subprocess.CREATE_NO_WINDOW
+        try:
+            r = subprocess.run(cmd, **kw)
+            if r.returncode == 0:
+                return
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
 
-def narration_kokoro_tts_audio_url(
-    narration: str,
-    *,
-    voice: str = "zm_yunxia",
-    speed: float = 1.0,
-    base_url: str = _KOKORO_DEFAULT_URL,
-    timeout: int = 120,
-) -> tuple[str, dict]:
-    """
-    调用 kokoserver.py 的 POST /tts 接口生成语音，返回 (file_url, 响应 dict)。
-    base_url 默认读取环境变量 KOKORO_TTS_URL，否则为 http://localhost:8000。
-    """
-    text = (narration or "").strip()
-    if not text:
-        raise ValueError("narration 为空")
-
-    endpoint = base_url.rstrip("/") + "/tts"
-    payload = json.dumps(
-        {"text": text, "voice": voice, "speed": speed}, ensure_ascii=False
-    ).encode("utf-8")
-    req = urllib.request.Request(
-        endpoint,
-        data=payload,
-        method="POST",
-        headers={"Content-Type": "application/json", "User-Agent": _TTS_UA},
-    )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            body = resp.read()
-    except urllib.error.HTTPError as exc:
+        import pygame
+    except ImportError as exc:
         raise RuntimeError(
-            f"Kokoro TTS HTTP 错误 {exc.code}: {exc.read().decode('utf-8', errors='replace')}"
+            "未找到 ffplay/mpv，且未安装 pygame：请安装 ffmpeg（含 ffplay）或 mpv，或 pip install pygame"
         ) from exc
-    except Exception as exc:
-        raise RuntimeError(f"Kokoro TTS 请求失败: {exc}") from exc
 
-    result: dict = json.loads(body)
-    file_url: str = result.get("file_url", "").strip()
-    if not file_url:
-        raise RuntimeError(f"Kokoro TTS 响应中无 file_url: {result!r}")
-    return file_url, result
-
-
-def _check_kokoro_available(base_url: str, timeout: int = 5) -> bool:
-    """快速探测 kokoserver 是否可达（GET /），可用返回 True。"""
     try:
-        req = urllib.request.Request(
-            base_url.rstrip("/") + "/",
-            headers={"User-Agent": _TTS_UA},
+        pygame.mixer.init()
+        pygame.mixer.music.load(path)
+        pygame.mixer.music.play()
+        clock = pygame.time.Clock()
+        while pygame.mixer.music.get_busy():
+            clock.tick(30)
+    finally:
+        if pygame.mixer.get_init():
+            pygame.mixer.quit()
+
+
+# ----- Kokoro 本地 TTS（进程内直接调用，无需 kokoserver.py）-----
+
+
+def resolve_kokoro_voice_path(voice: str) -> str:
+    """解析 Kokoro 音色路径：本地 .pt 文件 → voices/ 目录 → 从 HF 下载。"""
+    if voice.endswith(".pt"):
+        return voice
+    local_voice_path = _KOKORO_LOCAL_VOICE_DIR / f"{voice}.pt"
+    if local_voice_path.is_file():
+        return str(local_voice_path)
+    # 本地没有则尝试从 HF 下载
+    try:
+        from huggingface_hub import hf_hub_download
+        print(f"[Kokoro] 正在从 HuggingFace 下载音色文件: voices/{voice}.pt")
+        downloaded = hf_hub_download(
+            repo_id=_KOKORO_REPO_ID,
+            filename=f"voices/{voice}.pt",
+            local_dir=str(_KOKORO_LOCAL_MODEL_DIR),
         )
-        with urllib.request.urlopen(req, timeout=timeout):
-            return True
-    except Exception:
-        return False
+        return downloaded
+    except Exception as exc:
+        print(f"[Kokoro] 音色下载失败，回退为音色名: {exc}")
+        return voice
+
+
+def ensure_kokoro_model() -> "KModel":
+    """
+    确保本地 Kokoro 模型文件存在，不存在则自动从 HuggingFace 下载。
+    返回加载好的 KModel 实例。
+    """
+    if not _kokoro_available:
+        raise RuntimeError("kokoro 包未安装，请执行: pip install kokoro")
+    if np is None:
+        raise RuntimeError("numpy 未安装，请执行: pip install numpy")
+    if sf is None:
+        raise RuntimeError("soundfile 未安装，请执行: pip install soundfile")
+
+    _KOKORO_LOCAL_MODEL_DIR.mkdir(parents=True, exist_ok=True)
+    _KOKORO_LOCAL_VOICE_DIR.mkdir(parents=True, exist_ok=True)
+
+    config_path = _KOKORO_LOCAL_MODEL_DIR / "config.json"
+    model_filename = _KOKORO_MODEL_FILENAME_MAP.get(_KOKORO_REPO_ID, "kokoro-v1_0.pth")
+    model_path = _KOKORO_LOCAL_MODEL_DIR / model_filename
+
+    from huggingface_hub import hf_hub_download
+
+    if not config_path.is_file():
+        print(f"[Kokoro] 本地未找到 config.json，开始从 HuggingFace 下载（repo={_KOKORO_REPO_ID}）...")
+        hf_hub_download(repo_id=_KOKORO_REPO_ID, filename="config.json", local_dir=str(_KOKORO_LOCAL_MODEL_DIR))
+        print(f"[Kokoro] 已下载 config.json 到 {_KOKORO_LOCAL_MODEL_DIR}")
+    else:
+        print(f"[Kokoro] 使用本地 config.json: {config_path}")
+
+    if not model_path.is_file():
+        print(f"[Kokoro] 本地未找到 {model_filename}，开始从 HuggingFace 下载（文件较大，请耐心等待）...")
+        hf_hub_download(repo_id=_KOKORO_REPO_ID, filename=model_filename, local_dir=str(_KOKORO_LOCAL_MODEL_DIR))
+        print(f"[Kokoro] 已下载 {model_filename} 到 {_KOKORO_LOCAL_MODEL_DIR}")
+    else:
+        print(f"[Kokoro] 使用本地模型: {model_path}")
+
+    return KModel(repo_id=_KOKORO_REPO_ID, config=str(config_path), model=str(model_path))
+
+
+def _check_kokoro_available() -> bool:
+    """检查 Kokoro 本地 TTS 是否可用（kokoro + numpy + soundfile 均已安装）。"""
+    return _kokoro_available and np is not None and sf is not None
 
 
 # ----- 与 qwen3stream.py 对齐：实时 PCM 播放 + Qwen 实时 TTS WebSocket -----
@@ -1155,19 +1239,12 @@ def main() -> None:
         choices=["auto", "realtime", "dashscope", "kokoro"],
         help=(
             "TTS 后端选择："
-            "auto（自动：有 sounddevice 用 realtime，有 kokoserver 用 kokoro，否则 dashscope）；"
+            "auto（自动：有 sounddevice 用 realtime，有 kokoro 包用 kokoro，否则 dashscope）；"
             "realtime（DashScope 实时 WebSocket，需 sounddevice）；"
             "dashscope（DashScope qwen3-tts-flash HTTP，不需 sounddevice）；"
-            "kokoro（本地 kokoserver.py /tts 接口）。"
+            "kokoro（本地 Kokoro-82M 模型，需 pip install kokoro numpy soundfile）。"
             "环境变量 QWEN_TTS_BACKEND 可设默认值。"
         ),
-    )
-    parser.add_argument(
-        "--kokoro-url",
-        type=str,
-        default=os.getenv("KOKORO_TTS_URL", "http://localhost:8000"),
-        help="Kokoro TTS 服务地址（对应 kokoserver.py），默认 http://localhost:8000；"
-             "也可用环境变量 KOKORO_TTS_URL 设置。",
     )
     parser.add_argument(
         "--kokoro-voice",
@@ -1235,7 +1312,7 @@ def main() -> None:
         if b == "auto":
             if sd is not None:
                 effective_backend = "realtime"
-            elif _check_kokoro_available(args.kokoro_url):
+            elif _check_kokoro_available():
                 effective_backend = "kokoro"
             else:
                 effective_backend = "dashscope"
@@ -1267,12 +1344,12 @@ def main() -> None:
         )
     elif effective_backend == "kokoro":
         print(
-            f"语音合成模式: Kokoro 本地 TTS（{args.kokoro_url}，音色 {args.kokoro_voice}，"
+            f"语音合成模式: Kokoro 本地 TTS（音色 {args.kokoro_voice}，"
             f"语速 {args.kokoro_speed}）",
             flush=True,
         )
         print(
-            "[提示] Kokoro 后端需预先启动 kokoserver.py；"
+            "[提示] Kokoro 后端使用本地模型，无需启动 kokoserver.py；"
             "pip install sounddevice 后可改用实时 WebSocket 合成",
             flush=True,
         )
@@ -1283,9 +1360,20 @@ def main() -> None:
         )
         print(
             "[提示] pip install sounddevice 后可走实时 WebSocket 合成（本机流式播放）；"
-            "或用 --tts-backend=kokoro 走本地 Kokoro TTS",
+            "或用 --tts-backend=kokoro 走本地 Kokoro TTS（需 pip install kokoro numpy soundfile）",
             flush=True,
         )
+
+    # ------------------------------------------------------------------
+    # 初始化 Kokoro 本地 pipeline（如果需要）
+    # ------------------------------------------------------------------
+    kokoro_pipeline: Any | None = None
+    if effective_backend == "kokoro":
+        print("正在加载 Kokoro 本地模型...")
+        kokoro_model = ensure_kokoro_model()
+        kokoro_pipeline = KPipeline(lang_code="z", model=kokoro_model, repo_id=_KOKORO_REPO_ID)
+        _KOKORO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        print("Kokoro 本地模型加载完成。")
 
     size = max(1, args.batch_size)
     results: list[dict] = []
@@ -1428,29 +1516,36 @@ def main() -> None:
                         try:
                             if effective_backend == "kokoro":
                                 _t0 = time.perf_counter()
-                                audio_url, tts_payload = narration_kokoro_tts_audio_url(
-                                    narration_text,
-                                    voice=args.kokoro_voice,
-                                    speed=args.kokoro_speed,
-                                    base_url=args.kokoro_url,
+                                voice_path = resolve_kokoro_voice_path(args.kokoro_voice)
+                                generator = kokoro_pipeline(
+                                    narration_text, voice=voice_path, speed=args.kokoro_speed,
                                 )
-                                _http_sec = time.perf_counter() - _t0
-                                _audio_dur = tts_payload.get("duration") or 0.0
-                                _server_synth_sec = tts_payload.get("synthesis_time") or 0.0
+                                segments: list = []
+                                for result in generator:
+                                    audio_segment = np.asarray(result.output.audio, dtype=np.float32)
+                                    segments.append(audio_segment)
+                                if not segments:
+                                    raise RuntimeError("Kokoro 未生成任何音频片段")
+                                _synth_sec = time.perf_counter() - _t0
+                                audio_full = np.concatenate(segments, axis=0)
+                                _audio_dur = float(audio_full.shape[0]) / 24000.0
+                                # 保存到本地文件
+                                output_name = f"kokoro_{uuid.uuid4().hex}.wav"
+                                output_path = _KOKORO_OUTPUT_DIR / output_name
+                                sf.write(str(output_path), audio_full, 24000)
                                 print(
                                     f"[TTS] 批次 {bi} Kokoro 合成完成："
-                                    f"HTTP往返 {_http_sec:.2f}s（服务端推理 {_server_synth_sec:.2f}s），"
+                                    f"合成用时 {_synth_sec:.2f}s，"
                                     f"音频时长 {_audio_dur:.2f}s",
                                     flush=True,
                                 )
                                 with results_lock:
-                                    results[bi]["tts_url"] = audio_url
+                                    results[bi]["tts_local_file"] = str(output_path)
                                     results[bi]["tts_kokoro_duration"] = _audio_dur
-                                    results[bi]["tts_kokoro_synthesis_time"] = _server_synth_sec
-                                    results[bi]["tts_kokoro_http_time"] = round(_http_sec, 3)
-                                    results[bi]["tts_playback"] = "kokoro_tts_thread"
+                                    results[bi]["tts_kokoro_synthesis_time"] = round(_synth_sec, 3)
+                                    results[bi]["tts_playback"] = "kokoro_local"
                                     persist_results()
-                                play_audio_url(audio_url)
+                                _play_local_wav(output_path)
                             else:  # dashscope
                                 _t0 = time.perf_counter()
                                 audio_url, tts_payload = narration_dashscope_tts_audio_url(

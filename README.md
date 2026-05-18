@@ -249,7 +249,7 @@ python qwen-to-data7.py --tts-backend kokoro
 python qwen-to-data7.py --tts-backend kokoro --zmq-endpoint tcp://127.0.0.1:5557
 
 # 指定 Kokoro 服务地址与音色
-python qwen-to-data7.py -b 3 --tts-backend kokoro --kokoro-url http://localhost:8000 --kokoro-voice zm_yunxia --zmq-endpoint tcp://127.0.0.1:5557
+python qwen-to-data7.py -b 3 --tts-backend kokoro --kokoro-voice zm_yunxia --zmq-endpoint tcp://127.0.0.1:5557
 
 # 离线调试：从 JSONL 一次性读入事件（不走 ZMQ）
 python qwen-to-data7.py --input zmq_events.jsonl
