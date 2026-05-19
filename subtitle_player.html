@@ -108,6 +108,20 @@
       color: var(--accent);
       font-weight: 600;
     }
+    .narration-item {
+      padding: 5px 12px;
+      font-size: 0.8rem;
+      line-height: 1.45;
+      background: rgba(210,153,34,0.06);
+      border-bottom: 1px solid var(--border);
+      color: var(--warn);
+    }
+    .narration-label {
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: var(--warn);
+      margin-right: 4px;
+    }
 
     /* 中栏：视频 + 字幕 */
     .panel-center {
@@ -145,7 +159,7 @@
       padding: 6px 16px;
       background: rgba(0,0,0,0.78);
       border-radius: 6px;
-      font-size: 1.15rem;
+      font-size: 1.6rem;
       line-height: 1.5;
       color: #fff;
       text-shadow: 1px 1px 3px rgba(0,0,0,0.9);
@@ -201,7 +215,6 @@
   <h1>解说字幕播放器</h1>
   <div class="dot" id="statusDot"></div>
   <span class="status" id="statusText">未连接</span>
-  <label>WS:</label>
   <input id="wsUrl" type="text" value="ws://127.0.0.1:8765" />
   <button id="btnConnect" onclick="connectWS()">连接</button>
   <button id="btnDisconnect" onclick="disconnectWS()" disabled>断开</button>
@@ -255,15 +268,6 @@
   let subtitleTimer = null;
   let totalEvents = 0;
 
-  // 音频播放队列
-  const audioQueue = [];
-  let isPlaying = false;
-
-  // 用户点击后重试音频播放
-  document.addEventListener('click', () => {
-    if (!isPlaying && audioQueue.length > 0) playNextAudio();
-  });
-
   function setStatus(connected) {
     statusDot.className = 'dot ' + (connected ? 'ok' : 'err');
     statusText.textContent = connected ? '已连接' : '未连接';
@@ -311,6 +315,37 @@
     eventList.scrollTop = eventList.scrollHeight;
   }
 
+  // ---- 左栏：解说内容 ----
+  function addNarration(batchIndex, text) {
+    // 在对应批次的事件之后插入解说
+    const item = document.createElement('div');
+    item.className = 'narration-item';
+    item.dataset.batch = batchIndex;
+    item.innerHTML = `<span class="narration-label">解说</span>${escHtml(text)}`;
+    // 查找该批次的 divider，在其后所有事件之后插入
+    const dividers = eventList.querySelectorAll('.batch-divider');
+    let insertAfter = null;
+    for (const d of dividers) {
+      if (d.textContent.includes(`批次 ${batchIndex}`)) {
+        insertAfter = d;
+        break;
+      }
+    }
+    if (insertAfter) {
+      // 找到该批次最后一个事件元素（在下一个 divider 或 narration 之前）
+      let sibling = insertAfter.nextElementSibling;
+      let lastOfBatch = insertAfter;
+      while (sibling && !sibling.classList.contains('batch-divider') && !sibling.classList.contains('narration-item')) {
+        lastOfBatch = sibling;
+        sibling = sibling.nextElementSibling;
+      }
+      lastOfBatch.after(item);
+    } else {
+      eventList.appendChild(item);
+    }
+    eventList.scrollTop = eventList.scrollHeight;
+  }
+
   // ---- 右栏：日志 ----
   function addLog(tag, message) {
     const item = document.createElement('div');
@@ -325,45 +360,6 @@
 
   function escHtml(s) {
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
-
-  // ---- 音频队列播放器 ----
-  function playNextAudio() {
-    if (isPlaying || audioQueue.length === 0) return;
-    isPlaying = true;
-    const { url, text, batchIndex, duration } = audioQueue.shift();
-    audioStatus.textContent = `▶ ${batchIndex}`;
-    const fullUrl = url.startsWith('http') ? url : `http://${location.hostname}:${location.port}${url}`;
-    const audio = new Audio(fullUrl);
-    audio.onplay = () => {
-      showSubtitle(text || '', duration || 4);
-      addLog('播放', `▶ 批次 ${batchIndex}: ${text || ''}`);
-    };
-    audio.onended = () => {
-      subtitleEl.classList.add('hidden');
-      isPlaying = false;
-      audioStatus.textContent = '';
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'audio_done', batch_index: batchIndex }));
-      }
-      playNextAudio();
-    };
-    audio.onerror = () => {
-      subtitleEl.classList.add('hidden');
-      isPlaying = false;
-      audioStatus.textContent = '';
-      playNextAudio();
-    };
-    audio.play().catch(e => {
-      audioQueue.unshift({ url, text, batchIndex, duration });
-      isPlaying = false;
-      audioStatus.textContent = '⚠ 点击页面启用音频';
-    });
-  }
-
-  function enqueueAudio(data) {
-    audioQueue.push(data);
-    playNextAudio();
   }
 
   // ---- WebSocket ----
@@ -386,8 +382,8 @@
           case 'events':
             addEvents(data);
             break;
-          case 'audio':
-            enqueueAudio(data);
+          case 'narration':
+            addNarration(data.batch_index, data.text);
             break;
           case 'subtitle':
             showSubtitle(data.text, data.duration);

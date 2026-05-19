@@ -22,15 +22,16 @@
 - [test_kokoro.py](file://test_kokoro.py)
 - [zmq_events.jsonl](file://zmq_events.jsonl)
 - [zmqtest.py](file://zmqtest.py)
+- [subtitle_player.html](file://subtitle_player.html)
 </cite>
 
 ## 更新摘要
 **变更内容**
-- 更新qwen-to-data7.py的架构状态：文件仍存在但功能已被移除
-- 修正三线程并行流水线架构的描述，反映实际实现
-- 更新多后端TTS管理系统的当前状态
-- 修正实时TTS播放组件的架构说明
-- **新增** 增强事件批处理系统，支持更复杂的多团队运动场景，包括动作事件（raise_hand、squat、raise_hand+squat组合）和得分事件
+- 新增WebSocket日志功能，支持实时日志广播和可视化
+- 增强事件广播能力，支持多类型事件的实时传输
+- 集成详细的TTS合成日志，提供完整的性能监控
+- 新增字幕WebSocket服务和HTTP静态文件服务
+- 改进的音频队列管理和浏览器播放协调机制
 
 ## 目录
 1. [简介](#简介)
@@ -57,10 +58,11 @@
 - **自动文本修订**：政策违规自动重写功能
 - **性能监控**：详细的性能计时测量和HTTP往返时间跟踪
 - **错误处理**：完善的错误恢复机制和超时处理
+- **WebSocket日志系统**：实时日志广播和可视化监控
+- **增强事件广播**：多类型事件的实时传输和处理
+- **浏览器音频播放**：通过WebSocket实现远程音频播放协调
 
-**重要更新**：项目中的qwen-to-data7.py文件虽然仍存在于代码库中，但其原有的三线程并行流水线架构功能已被移除，当前仅保留基础的事件处理和TTS后端选择功能。
-
-**新增功能**：增强事件批处理系统，现已支持更复杂的多团队运动场景，包括动作事件（raise_hand、squat、raise_hand+squat组合）和得分事件的智能识别和处理。
+**重要更新**：项目新增了完整的WebSocket日志系统，包括实时日志广播、事件类型支持、音频队列深度监控等功能，为实时TTS系统提供了强大的可视化监控能力。
 
 ## 项目结构
 
@@ -70,39 +72,49 @@ subgraph "核心服务层"
 A[FastAPI服务器<br/>server.py]
 B[WebSocket处理<br/>ASR/TTS]
 C[音频处理<br/>PCM转换]
+D[WebSocket日志系统<br/>qwen-to-data7.py]
+E[事件广播系统<br/>qwen-to-data7.py]
 end
 subgraph "前端层"
-D[演示页面<br/>demo.html]
-E[Vue3组件<br/>SpeechRecorder.vue]
+F[演示页面<br/>demo.html]
+G[Vue3组件<br/>SpeechRecorder.vue]
+H[字幕播放器<br/>subtitle_player.html]
 end
 subgraph "音频处理层"
-F[实时TTS<br/>qwen3stream.py]
-G[批量TTS<br/>ttstest.py]
-H[ZMQ集成<br/>qwen-to-data4.py]
-I[多后端TTS<br/>qwen-to-data7.py]
-J[双线程并行<br/>gen/tts]
+I[实时TTS<br/>qwen3stream.py]
+J[批量TTS<br/>ttstest.py]
+K[ZMQ集成<br/>qwen-to-data4.py]
+L[多后端TTS<br/>qwen-to-data7.py]
+M[双线程并行<br/>gen/tts]
+N[WebSocket服务<br/>qwen-to-data7.py]
 end
 subgraph "配置层"
-K[TTS音色目录<br/>tts_voices_catalog.json]
-L[提示词配置<br/>qwen-to-date-prompts.json]
-M[JSON Schema<br/>jsonschema.json]
-N[事件批处理<br/>qwen-to-data6.py]
-O[事件数据<br/>zmq_events.jsonl]
+O[TTS音色目录<br/>tts_voices_catalog.json]
+P[提示词配置<br/>qwen-to-date-prompts.json]
+Q[JSON Schema<br/>jsonschema.json]
+R[事件批处理<br/>qwen-to-data6.py]
+S[事件数据<br/>zmq_events.jsonl]
+T[日志系统<br/>WebSocket日志]
 end
 A --> B
 A --> C
-D --> A
-E --> A
+A --> D
+A --> E
+A --> N
 F --> A
 G --> A
-H --> A
+H --> N
 I --> A
-J --> I
+J --> A
 K --> A
-L --> H
-M --> H
-N --> H
-O --> H
+L --> A
+M --> L
+O --> A
+P --> K
+Q --> K
+R --> K
+S --> K
+T --> D
 ```
 
 **图表来源**
@@ -127,7 +139,91 @@ O --> H
 - **TTS服务**：`POST /tts` - 语音合成服务
 - **音色查询**：`GET /tts/voices` - 音色列表查询
 
-### 2. 双线程并行流水线架构
+### 2. WebSocket日志系统
+
+**新增功能**：完整的WebSocket日志系统，提供实时日志广播和可视化监控：
+
+```mermaid
+sequenceDiagram
+participant LogSystem as 日志系统
+participant WebSocketServer as WebSocket服务器
+participant Browser as 浏览器客户端
+participant LogPanel as 日志面板
+LogSystem->>WebSocketServer : _ws_log(tag, message)
+WebSocketServer->>Browser : 广播{"type" : "log","tag" : tag,"message" : message}
+Browser->>LogPanel : 更新日志显示
+LogPanel->>LogPanel : 格式化日志内容
+LogPanel->>LogPanel : 实时滚动显示
+```
+
+**日志类型支持**：
+- **LLM日志**：千问模型生成进度和结果
+- **TTS日志**：实时TTS合成状态和性能指标
+- **解说日志**：事件处理和文本生成状态
+- **系统日志**：系统运行状态和错误信息
+
+**章节来源**
+- [qwen-to-data7.py:83-87](file://qwen-to-data7.py#L83-L87)
+
+### 3. 增强事件广播系统
+
+**新增功能**：多类型事件的实时广播和处理：
+
+```mermaid
+flowchart TD
+subgraph "事件类型"
+A[events] --> A1[事件列表]
+B[narration] --> B1[解说文本]
+C[audio] --> C1[音频URL]
+D[subtitle] --> D1[字幕文本]
+E[log] --> E1[日志消息]
+end
+subgraph "广播流程"
+A1 --> Broadcast[事件广播]
+B1 --> Broadcast
+C1 --> Broadcast
+D1 --> Broadcast
+E1 --> Broadcast
+Broadcast --> Clients[所有客户端]
+Clients --> Process[事件处理]
+Process --> Display[实时显示]
+end
+```
+
+**事件处理机制**：
+- **线程安全广播**：使用asyncio确保多客户端并发安全
+- **事件类型路由**：根据type字段分发到对应处理器
+- **实时队列管理**：WebSocket音频队列深度监控和协调
+
+**章节来源**
+- [qwen-to-data7.py:74-81](file://qwen-to-data7.py#L74-L81)
+
+### 4. 字幕WebSocket服务
+
+**新增功能**：独立的字幕WebSocket服务和HTTP静态文件服务：
+
+```mermaid
+sequenceDiagram
+participant Server as WebSocket服务器
+participant HTTPServer as HTTP服务器
+participant Browser as 浏览器
+Server->>Browser : WebSocket连接
+HTTPServer->>Browser : 静态文件服务
+Browser->>Server : 连接状态回执
+Server->>Browser : 事件数据广播
+Browser->>Server : 音频播放完成回执
+Server->>Server : 更新音频队列深度
+```
+
+**服务特性**：
+- **双服务架构**：WebSocket字幕服务 + HTTP静态文件服务
+- **自动浏览器打开**：服务启动后自动打开播放器页面
+- **音频队列协调**：通过回执消息协调音频播放进度
+
+**章节来源**
+- [qwen-to-data7.py:89-160](file://qwen-to-data7.py#L89-L160)
+
+### 5. 双线程并行流水线架构
 
 **重要更新**：系统现已实现双线程并行流水线架构，替代了之前计划的三线程架构：
 
@@ -147,7 +243,7 @@ Queue-->>Gen : 下一批次处理
 - **gen_worker（生成线程）**：负责事件批处理和文本生成
 - **tts_worker（合成线程）**：负责音频合成和队列管理
 
-### 3. 多后端TTS实现
+### 6. 多后端TTS实现
 
 项目实现了三种TTS后端模式：
 
@@ -155,7 +251,7 @@ Queue-->>Gen : 下一批次处理
 - **DashScope HTTP模式**：非实时合成，整段返回音频URL
 - **Kokoro本地TTS**：本地服务接口，支持自定义音色和语速
 
-### 4. 智能回退机制
+### 7. 智能回退机制
 
 系统具备智能的TTS后端选择能力：
 
@@ -163,7 +259,7 @@ Queue-->>Gen : 下一批次处理
 - **回退策略**：sounddevice → kokoserver → dashscope
 - **手动指定**：支持命令行参数强制指定后端
 
-### 5. 增强事件批处理系统
+### 8. 增强事件批处理系统
 
 **新增功能**：系统现已支持更复杂的多团队运动场景，包括：
 
@@ -195,13 +291,13 @@ end
 - [qwen-to-date-prompts.json:1-31](file://qwen-to-date-prompts.json#L1-L31)
 - [jsonschema.json:65-95](file://jsonschema.json#L65-L95)
 
-### 6. 自动文本修订
+### 9. 自动文本修订
 
 - **政策违规检测**：自动检测禁用词汇和正则表达式
 - **自动重写**：使用专用提示词自动重写违规内容
 - **质量保证**：重写后再次检测确保合规
 
-### 7. 性能监控系统
+### 10. 性能监控系统
 
 **新增** 增强的性能监控能力，包括：
 
@@ -210,6 +306,7 @@ end
 - **音频延迟监控**：跟踪首次音频延迟和会话ID
 - **错误统计**：记录和报告各种类型的错误
 - **队列深度监控**：实时监控播放队列积压情况
+- **WebSocket日志监控**：实时日志广播和可视化
 
 **章节来源**
 - [server.py:124-197](file://server.py#L124-L197)
@@ -229,6 +326,7 @@ participant Backend as 多后端调度
 participant Monitor as 性能监控
 participant Threads as 双线程流水线
 participant Events as 事件处理
+participant LogSystem as 日志系统
 Client->>WebSocket : 建立WebSocket连接
 WebSocket->>Client : 发送ready状态
 Client->>WebSocket : 发送PCM音频数据
@@ -242,8 +340,9 @@ Threads->>TTS : 生成音频流
 TTS-->>Threads : 音频数据
 Threads-->>Audio : 实时播放音频
 Events->>Backend : 处理实时事件
-Events->>Monitor : 记录事件处理指标
-Monitor-->>Client : 发送性能报告
+Events->>LogSystem : 记录事件处理指标
+LogSystem->>WebSocket : 广播日志消息
+WebSocket-->>Client : 发送性能报告
 ```
 
 **图表来源**
@@ -252,6 +351,179 @@ Monitor-->>Client : 发送性能报告
 - [qwen-to-data7.py:1561-1643](file://qwen-to-data7.py#L1561-L1643)
 
 ## 详细组件分析
+
+### WebSocket日志系统
+
+#### 实现原理
+
+**新增功能**：完整的WebSocket日志系统，提供实时日志广播和可视化监控：
+
+```mermaid
+flowchart TD
+Start([日志产生]) --> CheckWS{WebSocket可用?}
+CheckWS --> |是| CheckClients{有客户端连接?}
+CheckWS --> |否| End1[日志结束]
+CheckClients --> |是| Broadcast[广播日志]
+CheckClients --> |否| End2[日志结束]
+Broadcast --> CreateMsg[创建日志消息]
+CreateMsg --> SendWS[发送WebSocket消息]
+SendWS --> UpdateUI[更新浏览器界面]
+UpdateUI --> End3[日志完成]
+```
+
+**日志消息格式**：
+```json
+{
+  "type": "log",
+  "tag": "LLM",
+  "message": "批次 0 生成完成 用时 2.34s"
+}
+```
+
+**日志类型分类**：
+- **LLM日志**：千问模型生成状态和结果
+- **TTS日志**：实时TTS合成进度和性能
+- **解说日志**：事件处理和文本生成状态
+- **系统日志**：系统运行状态和错误信息
+
+**章节来源**
+- [qwen-to-data7.py:83-87](file://qwen-to-data7.py#L83-L87)
+
+#### 关键配置参数
+
+| 参数名称 | 默认值 | 说明 |
+|---------|--------|------|
+| WS_PORT | 8765 | WebSocket服务端口 |
+| HTTP_PORT | WS_PORT + 1 | HTTP静态文件服务端口 |
+| WS_AUDIO_QUEUE_DEPTH | [0] | 音频队列深度计数器 |
+
+#### 日志广播机制
+
+- **线程安全**：使用asyncio的`run_coroutine_threadsafe`确保线程安全
+- **客户端管理**：维护已连接客户端集合
+- **消息格式**：统一的日志消息格式，包含标签和内容
+- **实时更新**：浏览器端实时显示最新日志
+
+**章节来源**
+- [qwen-to-data7.py:74-81](file://qwen-to-data7.py#L74-L81)
+
+### 增强事件广播系统
+
+#### 实现原理
+
+**新增功能**：多类型事件的实时广播和处理：
+
+```mermaid
+flowchart TD
+subgraph "事件类型"
+A[events] --> A1[事件列表]
+B[narration] --> B1[解说文本]
+C[audio] --> C1[音频URL]
+D[subtitle] --> D1[字幕文本]
+E[log] --> E1[日志消息]
+end
+subgraph "广播流程"
+A1 --> Broadcast[事件广播]
+B1 --> Broadcast
+C1 --> Broadcast
+D1 --> Broadcast
+E1 --> Broadcast
+Broadcast --> Clients[所有客户端]
+Clients --> Process[事件处理]
+Process --> Display[实时显示]
+end
+```
+
+**事件处理流程**：
+1. **事件收集**：从ZMQ订阅或JSONL文件收集事件
+2. **事件分类**：根据事件类型进行分类处理
+3. **实时广播**：通过WebSocket实时广播事件
+4. **客户端处理**：浏览器端接收并处理事件
+5. **状态更新**：更新UI状态和统计数据
+
+**章节来源**
+- [qwen-to-data7.py:332-350](file://qwen-to-data7.py#L332-L350)
+
+#### 事件类型支持
+
+**新增功能**：支持多种事件类型的实时传输：
+
+- **events事件**：广播事件列表摘要
+- **narration事件**：广播生成的解说文本
+- **audio事件**：广播音频URL和播放信息
+- **subtitle事件**：广播字幕文本和显示时长
+- **log事件**：广播系统日志消息
+
+**事件数据结构**：
+```json
+{
+  "type": "events",
+  "batch_index": 0,
+  "count": 5,
+  "events": [
+    {
+      "event_id": "evt_001",
+      "time": "00:15.234",
+      "player_label": "A",
+      "action_label": "raise_hand",
+      "confidence": 0.85,
+      "score": {}
+    }
+  ]
+}
+```
+
+**章节来源**
+- [qwen-to-data7.py:427-455](file://qwen-to-data7.py#L427-L455)
+
+### 字幕WebSocket服务
+
+#### 实现原理
+
+**新增功能**：独立的字幕WebSocket服务和HTTP静态文件服务：
+
+```mermaid
+sequenceDiagram
+participant Server as WebSocket服务器
+participant HTTPServer as HTTP服务器
+participant Browser as 浏览器
+Server->>Browser : WebSocket连接
+HTTPServer->>Browser : 静态文件服务
+Browser->>Server : 连接状态回执
+Server->>Browser : 事件数据广播
+Browser->>Server : 音频播放完成回执
+Server->>Server : 更新音频队列深度
+```
+
+**服务架构**：
+- **双线程服务**：WebSocket服务线程 + HTTP服务线程
+- **事件循环管理**：维护asyncio事件循环
+- **客户端集合**：管理已连接的WebSocket客户端
+- **自动浏览器打开**：服务启动后自动打开播放器页面
+
+**章节来源**
+- [qwen-to-data7.py:89-160](file://qwen-to-data7.py#L89-L160)
+
+#### 服务配置
+
+| 参数名称 | 默认值 | 说明 |
+|---------|--------|------|
+| WS_PORT | 8765 | WebSocket服务端口 |
+| HTTP_PORT | WS_PORT + 1 | HTTP静态文件服务端口 |
+| AUTO_OPEN_BROWSER | True | 自动打开浏览器播放器 |
+
+#### 客户端交互
+
+**新增功能**：浏览器端的完整交互机制：
+
+- **连接管理**：自动连接和断开连接
+- **事件处理**：接收和处理各种事件类型
+- **音频播放**：通过HTML5 Audio播放音频
+- **队列协调**：发送播放完成回执
+- **状态显示**：实时显示连接状态和播放状态
+
+**章节来源**
+- [subtitle_player.html:415-471](file://subtitle_player.html#L415-L471)
 
 ### 双线程并行流水线架构
 
@@ -409,6 +681,7 @@ NarrationRealtimeTtsCallback <|-- MyCallback
 - **延迟跟踪**：监控首次音频延迟和会话ID
 - **错误统计**：记录和报告各种类型的错误
 - **队列深度监控**：实时监控播放队列积压情况
+- **WebSocket日志集成**：实时日志广播和可视化
 
 **章节来源**
 - [qwen3stream.py:12-19](file://qwen3stream.py#L12-L19)
@@ -451,6 +724,7 @@ CheckKokoro2 --> |是| Kokoro2[后端: kokoro]
 | DashScope HTTP | ❌ 低 | 高 | 低 | 批量合成 |
 | Kokoro本地 | ❌ 低 | 高 | 中等 | 本地部署场景 |
 | 双线程并行 | ✅ 高 | 高 | 高 | 高吞吐量实时场景 |
+| WebSocket日志 | ✅ 高 | 高 | 低 | 实时监控场景 |
 
 #### 实时TTS回调处理
 
@@ -477,6 +751,7 @@ Closed --> [*]
 - **超时处理**：智能的超时检测和错误恢复
 - **性能指标**：详细的性能指标记录和报告
 - **队列深度监控**：实时监控播放队列积压情况
+- **WebSocket日志监控**：实时日志广播和可视化
 
 #### 关键参数配置
 
@@ -616,6 +891,7 @@ Validate --> |失败| Error3[最终违规]
 - **重写处理时间**：跟踪文本修订的时间消耗
 - **实时TTS统计**：记录实时TTS的性能指标
 - **队列深度监控**：实时监控播放队列积压情况
+- **WebSocket日志监控**：实时日志广播和可视化
 
 **章节来源**
 - [qwen-to-data7.py:89-91](file://qwen-to-data7.py#L89-L91)
@@ -707,6 +983,42 @@ L --> H
 - **WebSocket通信**：实现低延迟的音频流传输
 - **实时播放**：支持音频的实时播放和控制
 
+#### 字幕播放器功能
+
+**新增功能**：完整的字幕播放器，支持WebSocket实时字幕和音频播放：
+
+```mermaid
+flowchart TD
+subgraph "播放器界面"
+A[视频播放器]
+B[字幕覆盖层]
+C[日志面板]
+D[事件面板]
+E[连接状态]
+end
+subgraph "WebSocket处理"
+F[事件接收]
+G[音频队列管理]
+H[日志广播]
+I[状态同步]
+end
+subgraph "用户交互"
+J[手动连接]
+K[断开连接]
+L[点击播放]
+M[自动连接]
+end
+A --> F
+B --> F
+C --> H
+D --> F
+E --> I
+J --> F
+K --> F
+L --> G
+M --> F
+```
+
 **章节来源**
 - [demo.html:248-685](file://demo.html#L248-L685)
 
@@ -727,50 +1039,80 @@ G[qwen-to-data6.py]
 H[test_kokoro.py]
 I[zmqtest.py]
 J[zmq_events.jsonl]
+K[subtitle_player.html]
 end
 subgraph "音频处理库"
-K[dashscope]
-L[sounddevice]
-M[pydub]
-N[soundfile]
-O[pyzmq]
-P[kokoro]
+L[dashscope]
+M[sounddevice]
+N[pydub]
+O[soundfile]
+P[pyzmq]
+Q[kokoro]
+R[websockets]
 end
 subgraph "AI模型"
-Q[Qwen3-ASR]
-R[Qwen3-TTS]
-S[Qwen Flash]
-T[Kokoro TTS]
+S[Qwen3-ASR]
+T[Qwen3-TTS]
+U[Qwen Flash]
+V[Kokoro TTS]
 end
 subgraph "基础库"
-U[FastAPI]
-V[Pydantic]
-W[NumPy]
-X[PyTorch]
-Y[Python-dotenv]
-Z[threading]
-AA[queue]
-BB[zmq]
-end
-A --> K
-A --> Q
-F --> K
-F --> L
-F --> N
-F --> P
-G --> BB
-G --> J
-I --> BB
-B --> K
-B --> L
-A --> U
-A --> V
-F --> W
-F --> X
-G --> W
-A --> X
-F --> Y
-F --> Z
+W[FastAPI]
+X[Pydantic]
+Y[NumPy]
+Z[PyTorch]
+AA[python-dotenv]
+BB[threading]
+CC[queue]
+DD[zmq]
+EE[asyncio]
+FF[http.server]
+GG[webbrowser]
+HH[tempfile]
+II[shutil]
+JJ[subprocess]
+KK[urllib]
+LL[json]
+MM[time]
+NN[os]
+OO[pathlib]
+PP[re]
+QQ[base64]
+RR[uuid]
+SS[base64]
+TT[importlib]
+UU[typing]
+VV[collections.abc]
+WW[contextlib]
+XX[functools]
+YY[operator]
+ZZ[statistics]
+AAA[math]
+BBB[decimal]
+CCC[fractions]
+DDD[heapq]
+EEE[bisect]
+FFF[weakref]
+GGG[types]
+HHH[inspect]
+III[traceback]
+JJJ[sys]
+KKK[platform]
+LLL[locale]
+MMM[calendar]
+NNN[datetime]
+OOO[time]
+PPP[calendar]
+QQQ[datetime]
+RRR[zoneinfo]
+SSS[zoneinfo]
+TTT[zoneinfo]
+UUU[zoneinfo]
+VVV[zoneinfo]
+WWW[zoneinfo]
+XXX[zoneinfo]
+YYY[zoneinfo]
+ZZZ[zoneinfo]
 ```
 
 **图表来源**
@@ -793,6 +1135,9 @@ F --> Z
 | numpy | 最新版本 | 数值计算支持 |
 | threading | Python标准库 | 多线程支持 |
 | queue | Python标准库 | 线程间通信 |
+| websockets | 最新版本 | WebSocket服务 |
+| http.server | Python标准库 | HTTP静态文件服务 |
+| webbrowser | Python标准库 | 自动打开浏览器 |
 
 **章节来源**
 - [requirements.txt:1-13](file://requirements.txt#L1-L13)
@@ -836,15 +1181,33 @@ F --> Z
 - **本地后端优化**：优化本地服务的响应时间
 - **双线程并行**：显著提升Kokoro后端吞吐量
 
-#### 6. 性能监控优化
+#### 6. WebSocket日志系统优化
 
-**新增** 增强的性能监控策略：
+**新增** WebSocket日志系统的性能优化：
 
-- **高精度计时**：使用`time.perf_counter()`进行微秒级计时
-- **HTTP往返时间**：监控网络延迟和API响应时间
-- **实时性能指标**：跟踪音频延迟和会话状态
-- **错误统计分析**：记录和分析各种错误类型
-- **队列深度监控**：实时监控播放队列积压情况
+- **异步广播**：使用asyncio实现高效的日志广播
+- **客户端管理**：优化客户端集合的添加和删除操作
+- **消息格式优化**：最小化日志消息的数据量
+- **实时更新**：浏览器端实时显示最新日志
+- **内存管理**：避免日志消息的内存泄漏
+
+#### 7. 事件广播优化
+
+**新增** 事件广播系统的性能优化：
+
+- **事件类型路由**：根据type字段快速分发事件
+- **线程安全广播**：使用run_coroutine_threadsafe确保安全
+- **客户端去重**：避免重复发送相同事件
+- **批量处理**：支持事件的批量处理和广播
+
+#### 8. 音频队列管理优化
+
+**新增** 音频队列管理系统的性能优化：
+
+- **队列深度监控**：实时跟踪音频播放队列深度
+- **回执机制**：通过audio_done消息协调播放进度
+- **自动清理**：播放完成后自动清理队列
+- **错误恢复**：音频播放失败时的自动重试机制
 
 ### 性能调优参数
 
@@ -857,6 +1220,8 @@ F --> Z
 | QWEN_REALTIME_TTS_WAIT | 实时性 | 10-30秒 |
 | QWEN_EVENTS_BATCH | 吞吐量 | 5-20条 |
 | KOKORO_SPEED | 合成速度 | 0.5-2.0倍 |
+| WS_PORT | 服务端口 | 8765 |
+| HTTP_PORT | HTTP端口 | WS_PORT + 1 |
 | 队列深度阈值 | 队列管理 | 1-3个批次 |
 
 ### 内存和CPU优化
@@ -867,6 +1232,7 @@ F --> Z
 - **后端选择优化**：根据硬件条件选择最优后端
 - **性能指标监控**：持续监控关键性能指标
 - **线程池管理**：合理配置线程数量和优先级
+- **WebSocket连接池**：优化WebSocket连接的管理
 
 ## 故障排除指南
 
@@ -881,6 +1247,8 @@ F --> Z
 - 验证防火墙设置
 - 调整超时参数
 - 查看性能监控日志
+- 检查WebSocket服务状态
+- 验证端口配置正确性
 
 #### 2. 音频播放问题
 
@@ -892,6 +1260,7 @@ F --> Z
 - 调整缓冲区大小
 - 监控音频延迟指标
 - 检查播放队列状态
+- 验证WebSocket连接状态
 
 #### 3. TTS合成问题
 
@@ -904,6 +1273,7 @@ F --> Z
 - 检查后端可用性
 - 分析HTTP往返时间
 - 监控队列深度
+- 检查WebSocket日志
 
 #### 4. 多后端选择问题
 
@@ -914,6 +1284,7 @@ F --> Z
 - 验证后端服务可用性
 - 使用--tts-backend手动指定
 - 查看后端选择日志
+- 检查依赖库安装状态
 
 #### 5. 双线程并行问题
 
@@ -925,6 +1296,7 @@ F --> Z
 - 监控CPU使用率
 - 调整线程优先级
 - 分析性能瓶颈
+- 检查WebSocket连接状态
 
 #### 6. 事件处理问题
 
@@ -936,8 +1308,33 @@ F --> Z
 - 监控事件处理延迟
 - 查看事件统计信息
 - 分析事件分类准确性
+- 检查WebSocket日志
 
-#### 7. 性能监控问题
+#### 7. WebSocket日志问题
+
+**问题现象**：日志不显示或显示异常
+
+**解决方案**：
+- 检查WebSocket连接状态
+- 验证日志消息格式
+- 监控日志广播频率
+- 查看浏览器控制台错误
+- 检查日志标签有效性
+- 分析客户端连接状态
+
+#### 8. 字幕播放器问题
+
+**问题现象**：字幕播放器无法连接或显示异常
+
+**解决方案**：
+- 检查WebSocket服务状态
+- 验证端口配置正确性
+- 检查HTTP静态文件服务
+- 监控浏览器连接状态
+- 查看播放器日志
+- 验证音频队列深度
+
+#### 9. 性能监控问题
 
 **问题现象**：性能指标不准确或缺失
 
@@ -947,6 +1344,7 @@ F --> Z
 - 查看错误日志
 - 调整监控频率
 - 监控队列深度变化
+- 检查WebSocket日志
 
 ### 调试技巧
 
@@ -959,6 +1357,7 @@ F --> Z
 - **性能监控日志**：分析性能计时和错误统计
 - **线程状态日志**：监控双线程的运行状态
 - **事件处理日志**：分析事件批处理的性能
+- **WebSocket日志**：实时日志广播和可视化监控
 
 #### 2. 性能监控
 
@@ -968,6 +1367,7 @@ F --> Z
 - **TTS延迟**：测量端到端延迟
 - **HTTP往返时间**：跟踪API调用的响应时间
 - **队列深度**：监控播放队列积压情况
+- **WebSocket连接数**：监控活跃的WebSocket连接数
 
 #### 3. 音频质量测试
 
@@ -977,6 +1377,7 @@ F --> Z
 - **回退测试**：测试不同后端的切换
 - **性能回归测试**：验证性能改进效果
 - **双线程性能测试**：验证并行处理效果
+- **WebSocket日志测试**：验证日志广播功能
 
 #### 4. 错误处理调试
 
@@ -985,6 +1386,7 @@ F --> Z
 - **日志分析**：查看详细的错误堆栈信息
 - **性能影响**：评估错误处理对整体性能的影响
 - **线程死锁检测**：检查双线程间的同步问题
+- **WebSocket连接测试**：验证连接的稳定性
 
 **章节来源**
 - [README.md:194-204](file://README.md#L194-L204)
@@ -1005,12 +1407,15 @@ F --> Z
 10. **强大的错误处理**：完善的错误恢复机制和超时处理
 11. **实时性能优化**：智能的性能调优和资源管理
 12. **动态语速调节**：根据队列深度自动调整合成速度
+13. **WebSocket日志系统**：实时日志广播和可视化监控
+14. **增强事件广播**：多类型事件的实时传输和处理
+15. **浏览器音频播放**：通过WebSocket实现远程音频播放协调
 
 **重要更新**：双线程并行流水线架构的引入，使得系统能够同时处理多个批次的音频合成任务，显著提升了整体吞吐量和响应性能。虽然原本计划的三线程架构（gen/tts/play）已被移除，但当前的双线程架构仍然能够有效处理实时语音应用场景，适用于生产环境的严格要求。
 
-**新增功能**：增强事件批处理系统现已支持复杂的多团队运动场景，包括动作事件（raise_hand、squat、raise_hand+squat组合）和得分事件的智能识别和处理，为体育赛事解说提供了更丰富的事件支持。
+**新增功能**：增强事件批处理系统现已支持复杂的多团队运动场景，包括动作事件（raise_hand、squat、raise_hand+squat组合）和得分事件的智能识别和处理，为体育赛事解说提供了更丰富的事件支持。WebSocket日志系统的引入为实时TTS系统提供了强大的可视化监控能力，包括实时日志广播、事件类型支持、音频队列深度监控等功能。
 
-项目的核心优势在于其实时性和高质量的音频处理能力，以及智能的多后端支持、自动纠错机制、全面的性能监控和强大的错误处理能力，适用于各种实时语音应用场景。通过合理的性能调优和错误处理机制，可以满足生产环境的严格要求。
+项目的核心优势在于其实时性和高质量的音频处理能力，以及智能的多后端支持、自动纠错机制、全面的性能监控、强大的错误处理能力、WebSocket日志系统和增强事件广播功能，适用于各种实时语音应用场景。通过合理的性能调优和错误处理机制，可以满足生产环境的严格要求。
 
 ## 附录
 
@@ -1079,6 +1484,28 @@ async function synthesizeSpeech(text, voice) {
 };
 ```
 
+#### 4. WebSocket日志集成
+
+```javascript
+// WebSocket日志接收
+const logWs = new WebSocket('ws://localhost:8765');
+
+logWs.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === 'log') {
+        addLog(data.tag || 'SYS', data.message || '');
+    }
+};
+
+function addLog(tag, message) {
+    const logEntry = document.createElement('div');
+    logEntry.className = `log-entry ${tag.toLowerCase()}`;
+    logEntry.innerHTML = `[${new Date().toLocaleTimeString()}] ${tag}: ${message}`;
+    document.getElementById('logList').appendChild(logEntry);
+    document.getElementById('logList').scrollTop = document.getElementById('logList').scrollHeight;
+}
+```
+
 ### 配置文件说明
 
 #### 1. 环境变量配置
@@ -1118,6 +1545,11 @@ QUEUE_DEPTH_THRESHOLD=3
 QWEN_EVENTS_BATCH=10
 ZMQ_ENDPOINT=tcp://localhost:5557
 ZMQ_TOPIC=hado.event
+
+# WebSocket日志配置
+WS_PORT=8765
+HTTP_PORT=8766
+AUTO_OPEN_BROWSER=true
 ```
 
 #### 2. 音色配置
@@ -1143,7 +1575,7 @@ ZMQ_TOPIC=hado.event
 
 ```json
 {
-    "system": "你是 HADO AR 竞技比赛的中文解说员。【输入】用户 JSON 含：说明、fragment_meta、fragment_stats（程序预统计的 action/score 条数与 narration_focus）、json_schema、events、forbidden_substrings、forbidden_regexes、final_only_substrings。务必先读 fragment_meta 与 fragment_stats.narration_focus。【事件含义】event_type 为 action 或 score。抬手=发射能量球攻击；下蹲=躲避防御；抬手+下蹲=防御反击。score 表示得分方得一分，可含 KO 信息。【选材与侧重——必须有"攻防画面"】- 先数本批 events 里 event_type 为 action 与 score 的条数（可与 fragment_stats 对照）。- 若本批没有 score，或 action 条数大于等于 score 条数：narration 必须以攻防为主，要激情高昂的解说词，活跃解说氛围。- 若本批有 score 且 score 明显是片段焦点（score 多于 action）：可以写得分解说，避免只报比分感。【输出】只返回一个 JSON 对象：{\"narration\":\"...\"}，不要 Markdown、不要其它键。【narration 硬性规则】1) 长度不超过 50 个字符（汉字/字母/数字/标点各算 1）。2) 不要特殊符号（不要用 * # 【】等）。3) narration 不得包含 forbidden_substrings 任一子串。4) narration 不得被 forbidden_regexes 中任一正则匹配（模型侧按字面理解这些模式，避免同义套话）。5) 仅当 is_final_batch 为 true 时，才允许出现 final_only_substrings 中的子串；否则禁止。6) 得分解说避免复读模板：不要用「又得一城」「连下N城」「击倒/倒下」类说法；换用「蓝方得分」「红方扳回一分」「双方僵持」等不重复、具体的短句。7) 若本批以普通攻防为主、无 score，不要写成连续得分或 KO 口吻。8) narration 中禁止写入视频时间码（禁止与 events 里 time 字段同形的 mm:ss.mmm，如 00:30.083）；不要「时间码+逗号+解说」式拼接，解说只写现场短句。",
+    "system": "你是 HADO AR 竞技比赛的中文解说员。【输入】用户 JSON 含：说明、fragment_meta、fragment_stats（程序预统计的 action/score 条数与 narration_focus）、json_schema、events、forbidden_substrings、forbidden_regexes、final_only_substrings。务必先读 fragment_meta 与 fragment_stats.narration_focus。【事件含义】event_type 为 action 或 score。抬手=发射能量球攻击；下蹲=躲避防御；抬手+下蹲=防御反击。score 表示得分方得一分，可含 KO 信息。【选材与侧重——必须有\"攻防画面\"】- 先数本批 events 里 event_type 为 action 与 score 的条数（可与 fragment_stats 对照）。- 若本批没有 score，或 action 条数大于等于 score 条数：narration 必须以攻防为主，要激情高昂的解说词，活跃解说氛围。- 若本批有 score 且 score 明显是片段焦点（score 多于 action）：可以写得分解说，避免只报比分感。【输出】只返回一个 JSON 对象：{\"narration\":\"...\"}，不要 Markdown、不要其它键。【narration 硬性规则】1) 长度不超过 50 个字符（汉字/字母/数字/标点各算 1）。2) 不要特殊符号（不要用 * # 【】等）。3) narration 不得包含 forbidden_substrings 任一子串。4) narration 不得被 forbidden_regexes 中任一正则匹配（模型侧按字面理解这些模式，避免同义套话）。5) 仅当 is_final_batch 为 true 时，才允许出现 final_only_substrings 中的子串；否则禁止。6) 得分解说避免复读模板：不要用「又得一城」「连下N城」「击倒/倒下」类说法；换用「蓝方得分」「红方扳回一分」「双方僵持」等不重复、具体的短句。7) 若本批以普通攻防为主、无 score，不要写成连续得分或 KO 口吻。8) narration 中禁止写入视频时间码（禁止与 events 里 time 字段同形的 mm:ss.mmm，如 00:30.083）；不要「时间码+逗号+解说」式拼接，解说只写现场短句。",
     "user_note": "以下为 HADO 视频识别事件片段（按文件顺序），请据此生成一条解说。请先粗数本批 action 与 score 条数：动作为主时必须写防御或进攻类现场短句，不要只写得分解说。请同时遵守 fragment_meta、forbidden_substrings、forbidden_regexes、final_only_substrings。",
     "forbidden_substrings": ["再下一城","下一城","再进一分","又得一城","连下","倒下","倒地","倒地不起","轰然倒下","击倒","被击倒","击倒在地","锁定优势"],
     "forbidden_regexes": ["连下[一二三四五六七八九十百千万两]+城","连得[一二三四五六七八九十百千万两]+分","连下[0-9]+城","连得[0-9]+分","\\d{2}:\\d{2}\\.\\d{3}"],
@@ -1160,6 +1592,7 @@ ZMQ_TOPIC=hado.event
 |------|------|------|
 | `/ws/asr` | WebSocket | 实时语音识别 |
 | `/ws/tts` | WebSocket | 实时语音合成 |
+| `ws://localhost:8765` | WebSocket | 字幕和日志服务 |
 
 #### 2. HTTP接口
 
@@ -1192,6 +1625,7 @@ ZMQ_TOPIC=hado.event
 | `--zmq-endpoint` | str | tcp://localhost:5557 | ZMQ服务地址 |
 | `--zmq-topic` | str | hado.event | ZMQ订阅主题 |
 | `--ws-port` | int | 8765 | 字幕WebSocket端口 |
+| `--http-port` | int | 8766 | 字幕HTTP端口 |
 
 ### 性能监控参考
 
@@ -1209,6 +1643,8 @@ ZMQ_TOPIC=hado.event
 | synthesis_speed | float | 合成速度倍率 | 0.5-2.0倍 |
 | event_processing_time | float | 事件处理时间（秒） | < 10s |
 | event_count | int | 处理事件数量 | > 0 |
+| ws_client_count | int | WebSocket客户端数量 | >= 0 |
+| log_broadcast_count | int | 日志广播次数 | >= 0 |
 
 #### 2. 错误类型
 
@@ -1224,6 +1660,8 @@ ZMQ_TOPIC=hado.event
 | PerformanceDegradation | 性能下降 | 监控CPU使用率，优化算法 |
 | EventProcessingError | 事件处理错误 | 重试事件处理，检查事件格式 |
 | ZMQConnectionError | ZMQ连接错误 | 重试连接，检查ZMQ服务 |
+| WebSocketLogError | WebSocket日志错误 | 检查日志广播，重新建立连接 |
+| AudioQueueDepthError | 音频队列深度错误 | 检查队列管理，重置深度计数 |
 
 #### 3. 双线程监控指标
 
@@ -1238,3 +1676,5 @@ ZMQ_TOPIC=hado.event
 | throughput_bps | float | 吞吐量（字节/秒） | 性能计时统计 |
 | event_batch_size | int | 事件批大小 | 事件统计监控 |
 | event_processing_rate | float | 事件处理速率（事件/秒） | 事件统计监控 |
+| ws_log_broadcast_rate | float | WebSocket日志广播速率（条/秒） | 日志统计监控 |
+| audio_queue_depth_avg | float | 音频队列深度平均值 | 队列统计监控 |

@@ -67,8 +67,6 @@ _ws_clients: set = set()
 """已连接的 WebSocket 客户端。"""
 _ws_loop: _asyncio.AbstractEventLoop | None = None
 """WebSocket 事件循环（在后台线程运行）。"""
-_ws_audio_queue_depth: list[int] = [0]
-"""WS 模式下浏览器音频队列积压计数（可变容器，跨函数共享）。"""
 
 
 def _ws_broadcast(data: dict) -> None:
@@ -98,13 +96,7 @@ def _start_ws_server(ws_port: int, http_port: int) -> None:
         _ws_clients.add(websocket)
         try:
             async for msg in websocket:
-                # 接收客户端回执（音频播放完毕）
-                try:
-                    data = json.loads(msg)
-                    if data.get("type") == "audio_done":
-                        _ws_audio_queue_depth[0] = max(0, _ws_audio_queue_depth[0] - 1)
-                except (json.JSONDecodeError, TypeError):
-                    pass
+                pass  # 暂不处理客户端消息
         finally:
             _ws_clients.discard(websocket)
 
@@ -445,6 +437,13 @@ def process_one_batch(
         else:
             print(f"批次 {batch_index}: {narration}")
             _ws_log("解说", f"批次 {batch_index}: {narration}")
+            # 广播解说文本给浏览器（左栏 ZMQ 面板展示）
+            if _ws_available and _ws_loop is not None:
+                _ws_broadcast({
+                    "type": "narration",
+                    "batch_index": batch_index,
+                    "text": str(narration).strip(),
+                })
 
         if use_embed_stream and tts_meta_stream is not None:
             record["tts_realtime"] = tts_meta_stream
@@ -1803,8 +1802,8 @@ def main() -> None:
         # kokoro 并行优化：合成完立即通知播放线程，合成与播放流水并行
         # dashscope 仍走原来的串行路径（合成即在线流式，无需拆分）
         # _play_queue 携带 numpy 数组而非文件路径，管道直传播放跳过磁盘 I/O
-        _play_queue: queue.Queue[tuple["np.ndarray", float, int] | None] = queue.Queue()
-        """播放队列元素: (audio_array, audio_duration, batch_index) 或 None(终止)"""
+        _play_queue: queue.Queue[tuple["np.ndarray", float, int, str] | None] = queue.Queue()
+        """播放队列元素: (audio_array, audio_duration, batch_index, narration_text) 或 None(终止)"""
 
         # 缓存 voice 路径（启动时已 resolve 一次，后续复用）
         _cached_voice_path: str | None = None
@@ -1812,7 +1811,7 @@ def main() -> None:
             _cached_voice_path = resolve_kokoro_voice_path(args.kokoro_voice)
 
         def _playback_worker() -> None:
-            """专职本地播放线程：持续 PCM 播放（仅 WS 不可用时启用）。"""
+            """专职本地播放线程：持续 PCM 播放 + 广播字幕给浏览器。"""
             player = _ContinuousPlayer(sample_rate=24000, channels=1)
             try:
                 while True:
@@ -1821,7 +1820,15 @@ def main() -> None:
                         if item is None:
                             player.close()
                             return
-                        audio_arr, _dur, _bi = item
+                        audio_arr, _dur, _bi, _txt = item
+                        # 广播字幕给浏览器（与本地播放同步）
+                        if _txt:
+                            _ws_broadcast({
+                                "type": "subtitle",
+                                "batch_index": _bi,
+                                "text": _txt,
+                                "duration": _dur,
+                            })
                         player.write(audio_arr)
                     except Exception as exc:
                         print(f"[播放线程] 批次 {_bi} 播放失败: {exc}", flush=True)
@@ -1830,13 +1837,9 @@ def main() -> None:
             finally:
                 player.close()
 
-        # kokoro + WS 可用时，音频通过浏览器播放，无需本地播放线程
-        # 等待确认 WS 服务已成功启动
-        time.sleep(0.5)
-        _use_ws_playback = effective_backend == "kokoro" and _ws_available and _ws_loop is not None and bool(_ws_clients is not None)
-
+        # kokoro 始终使用本地播放线程（声音从后端扬声器播放，浏览器只显示字幕）
         _t_play: threading.Thread | None = None
-        if effective_backend == "kokoro" and not _use_ws_playback:
+        if effective_backend == "kokoro":
             _t_play = threading.Thread(
                 target=_playback_worker, name="qwen-to-data7-play", daemon=False
             )
@@ -1849,7 +1852,7 @@ def main() -> None:
                     try:
                         if job is None:
                             # 合成结束，通知播放线程退出
-                            if effective_backend == "kokoro" and not _use_ws_playback:
+                            if effective_backend == "kokoro":
                                 _play_queue.put(None)
                             return
                         bi, narration_text, voice, tts_inst = job
@@ -1859,10 +1862,7 @@ def main() -> None:
                                 _t0 = time.perf_counter()
                                 # 动态语速：播放队列积压时自动加速
                                 _base_speed = args.kokoro_speed
-                                if _use_ws_playback:
-                                    _queue_depth = _ws_audio_queue_depth[0]
-                                else:
-                                    _queue_depth = _play_queue.qsize()
+                                _queue_depth = _play_queue.qsize()
                                 _speed = _base_speed
                                 if _queue_depth >= 6:
                                     _speed = min(_base_speed * 1.80, 2.0)
@@ -1912,22 +1912,8 @@ def main() -> None:
                                     results[bi]["tts_kokoro_synthesis_time"] = round(_synth_sec, 3)
                                     results[bi]["tts_playback"] = "kokoro_local"
                                     persist_results()
-                                # 直接传 numpy 数组到播放队列，管道直传播放，跳过磁盘 I/O
-                                if _use_ws_playback:
-                                    # WS 模式：广播音频 URL 给浏览器播放
-                                    audio_rel = f"/kokoro_output/{output_name}"
-                                    _ws_audio_queue_depth[0] += 1
-                                    _ws_broadcast({
-                                        "type": "audio",
-                                        "batch_index": bi,
-                                        "url": audio_rel,
-                                        "duration": round(_audio_dur, 2),
-                                        "text": narration_text,
-                                        "queue_depth": _ws_audio_queue_depth[0],
-                                    })
-                                else:
-                                    # 本地播放模式
-                                    _play_queue.put((audio_full, _audio_dur, bi))
+                                # 直接传 numpy 数组到播放队列，管道直传播放
+                                _play_queue.put((audio_full, _audio_dur, bi, narration_text))
                             else:  # dashscope
                                 _t0 = time.perf_counter()
                                 audio_url, tts_payload = narration_dashscope_tts_audio_url(
@@ -1987,17 +1973,12 @@ def main() -> None:
         if _t_play is not None:
             _t_play.join()
         print("解说线程与 TTS 线程均已结束", flush=True)
-        # WS 模式下：主线程需保持存活，以便 HTTP/WS 服务继续运行（浏览器可能还在播放）
-        if _use_ws_playback:
-            print("[主线程] 等待浏览器播放完成（Ctrl+C 退出）…", flush=True)
+        # WS/HTTP 服务是 daemon 线程，主线程退出会被杀；保持存活供浏览器继续查看
+        if _ws_available and _ws_loop is not None:
+            print("[主线程] 所有音频已播放完毕，WS/HTTP 服务保持运行（Ctrl+C 退出）…", flush=True)
             try:
                 while True:
                     time.sleep(1)
-                    # 浏览器音频队列清零说明所有音频已播完
-                    if _ws_audio_queue_depth[0] <= 0:
-                        print("[主线程] 浏览器音频已全部播放完毕，3 秒后自动退出…", flush=True)
-                        time.sleep(3)
-                        break
             except KeyboardInterrupt:
                 print("\n[主线程] 用户中断，退出", flush=True)
 
