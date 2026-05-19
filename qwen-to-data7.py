@@ -1504,12 +1504,37 @@ def main() -> None:
         # kokoro 或 dashscope 非实时回退路径
         tts_queue: queue.Queue[tuple[int, str, str, str] | None] = queue.Queue()
 
+        # kokoro 并行优化：合成完立即通知播放线程，合成与播放流水并行
+        # dashscope 仍走原来的串行路径（合成即在线流式，无需拆分）
+        _play_queue: queue.Queue[Path | None] = queue.Queue()
+
+        def _playback_worker() -> None:
+            """专职播放线程：串行播放，不阻塞合成线程。"""
+            while True:
+                item = _play_queue.get()
+                try:
+                    if item is None:
+                        return
+                    _play_local_wav(item)
+                finally:
+                    _play_queue.task_done()
+
+        _t_play: threading.Thread | None = None
+        if effective_backend == "kokoro":
+            _t_play = threading.Thread(
+                target=_playback_worker, name="qwen-to-data7-play", daemon=False
+            )
+            _t_play.start()
+
         def tts_worker() -> None:
             try:
                 while True:
                     job = tts_queue.get()
                     try:
                         if job is None:
+                            # 合成结束，通知播放线程退出
+                            if effective_backend == "kokoro":
+                                _play_queue.put(None)
                             return
                         bi, narration_text, voice, tts_inst = job
                         print(f"[TTS 线程] 批次 {bi} 开始（{effective_backend}）…", flush=True)
@@ -1545,7 +1570,8 @@ def main() -> None:
                                     results[bi]["tts_kokoro_synthesis_time"] = round(_synth_sec, 3)
                                     results[bi]["tts_playback"] = "kokoro_local"
                                     persist_results()
-                                _play_local_wav(output_path)
+                                # 合成完成后立即将文件交给播放线程，无需等待播放结束
+                                _play_queue.put(output_path)
                             else:  # dashscope
                                 _t0 = time.perf_counter()
                                 audio_url, tts_payload = narration_dashscope_tts_audio_url(
@@ -1587,14 +1613,23 @@ def main() -> None:
 
         t_tts = threading.Thread(target=tts_worker, name="qwen-to-data7-tts", daemon=False)
         t_gen = threading.Thread(target=gen_worker, name="qwen-to-data7-gen", daemon=False)
-        print(
-            f"解说生成与语音合成分别在两个线程中并行执行（{effective_backend} TTS 回退路径）",
-            flush=True,
-        )
+        if effective_backend == "kokoro":
+            print(
+                "解说生成（gen）/ Kokoro 合成（tts）/ 播放（play）三线程流水并行",
+                flush=True,
+            )
+        else:
+            print(
+                f"解说生成与语音合成分别在两个线程中并行执行（{effective_backend} TTS 回退路径）",
+                flush=True,
+            )
         t_tts.start()
         t_gen.start()
         t_gen.join()
         t_tts.join()
+        # kokoro 模式：等待播放线程播完所有已合成的音频
+        if _t_play is not None:
+            _t_play.join()
         print("解说线程与 TTS 线程均已结束", flush=True)
 
 
