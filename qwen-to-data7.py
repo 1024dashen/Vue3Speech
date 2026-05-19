@@ -80,6 +80,12 @@ def _ws_broadcast(data: dict) -> None:
         _asyncio.run_coroutine_threadsafe(ws.send(msg), _ws_loop)
 
 
+def _ws_log(tag: str, message: str) -> None:
+    """向浏览器广播日志消息。"""
+    if _ws_loop is not None and _ws_clients:
+        _ws_broadcast({"type": "log", "tag": tag, "message": message})
+
+
 def _start_ws_server(ws_port: int, http_port: int) -> None:
     """在后台线程启动 WebSocket 字幕服务 + HTTP 静态文件服务。"""
     if not _ws_available:
@@ -323,6 +329,25 @@ def process_one_batch(
             flush=True,
         )
 
+    # 广播 ZMQ 事件给浏览器
+    if _ws_available and _ws_loop is not None:
+        events_summary = []
+        for ev in chunk:
+            events_summary.append({
+                "event_id": ev.get("event_id", ""),
+                "time": ev.get("time", ""),
+                "player_label": ev.get("player", {}).get("team_label", ""),
+                "action_label": ev.get("action", {}).get("label", ""),
+                "confidence": ev.get("action", {}).get("confidence", 0),
+                "score": ev.get("score", {}),
+            })
+        _ws_broadcast({
+            "type": "events",
+            "batch_index": batch_index,
+            "count": len(chunk),
+            "events": events_summary,
+        })
+
     use_embed_stream = shared_pcm_player is not None
     tts_meta_stream: dict | None = None
     if use_embed_stream:
@@ -350,6 +375,7 @@ def process_one_batch(
             f"[解说] 批次 {batch_index} 千问生成完成：用时 {_llm_sec:.2f}s",
             flush=True,
         )
+        _ws_log("LLM", f"[LLM] 批次 {batch_index} 生成完成 用时 {_llm_sec:.2f}s")
     record: dict = {
         "batch_index": batch_index,
         "total_batches": total_batches,
@@ -418,6 +444,7 @@ def process_one_batch(
             print(f"批次 {batch_index}: 已重写 -> {narration}")
         else:
             print(f"批次 {batch_index}: {narration}")
+            _ws_log("解说", f"批次 {batch_index}: {narration}")
 
         if use_embed_stream and tts_meta_stream is not None:
             record["tts_realtime"] = tts_meta_stream
@@ -1877,6 +1904,8 @@ def main() -> None:
                                     f"{' (加速x' + f'{_speed/_base_speed:.2f}' + ')' if _speed > _base_speed else ''}",
                                     flush=True,
                                 )
+                                _ws_log("TTS", f"[TTS] 批次 {bi} 合成完成 {_synth_sec:.2f}s / 音频{_audio_dur:.2f}s"
+                                    + (f" 加速x{_speed/_base_speed:.2f}" if _speed > _base_speed else ""))
                                 with results_lock:
                                     results[bi]["tts_local_file"] = str(output_path)
                                     results[bi]["tts_kokoro_duration"] = _audio_dur

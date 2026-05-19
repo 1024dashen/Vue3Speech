@@ -6,6 +6,7 @@
 - [server.py](file://server.py)
 - [SpeechRecorder.vue](file://SpeechRecorder.vue)
 - [demo.html](file://demo.html)
+- [subtitle_player.html](file://subtitle_player.html)
 - [requirements.txt](file://requirements.txt)
 - [tts_voices_catalog.json](file://tts_voices_catalog.json)
 - [ttstest.py](file://ttstest.py)
@@ -13,6 +14,13 @@
 - [index.py](file://index.py)
 - [edge_subtitle_voiceover.py](file://edge_subtitle_voiceover.py)
 </cite>
+
+## 更新摘要
+**变更内容**
+- 增强WebSocket接口，支持音频播放队列管理和字幕同步播放
+- 新增音频完成确认机制，通过`audio_done`消息实现批次同步
+- 添加批次索引管理，支持多批次音频的有序处理
+- 更新实时识别WebSocket协议，增加音频消息类型支持
 
 ## 目录
 1. [简介](#简介)
@@ -30,6 +38,8 @@
 
 本指南面向Vue3开发者，提供完整的前端API集成方案，涵盖后端FastAPI提供的语音识别、实时WebSocket识别和TTS服务调用。项目基于Vue3/静态页面前端与FastAPI后端的语音应用，集成了本地Qwen3-ASR负责识别和阿里云DashScope（Qwen3 TTS）负责在线合成。
 
+**更新** 项目现已增强WebSocket接口，支持音频播放队列管理和字幕同步播放，新增音频完成确认机制，实现更精确的批次同步和用户体验优化。
+
 ## 项目结构
 
 ```mermaid
@@ -38,6 +48,7 @@ subgraph "前端层"
 Vue[Vue3应用]
 Demo[demo.html]
 Recorder[SpeechRecorder.vue]
+SubtitlePlayer[subtitle_player.html]
 end
 subgraph "后端层"
 FastAPI[FastAPI服务器]
@@ -52,6 +63,7 @@ end
 Vue --> FastAPI
 Demo --> FastAPI
 Recorder --> FastAPI
+SubtitlePlayer --> WebSocket
 FastAPI --> ASR
 FastAPI --> TTS
 FastAPI --> WebSocket
@@ -79,6 +91,15 @@ EdgeTTS -.-> FastAPI
 4. **实时识别**：`WebSocket /ws/asr` - 流式WebSocket识别
 5. **TTS服务**：`POST /tts` - 文本转语音合成
 6. **语音列表**：`GET /tts/voices` - 获取可用语音列表
+7. **字幕播放器**：`WebSocket /ws/subtitle` - 字幕同步播放（新增）
+
+### WebSocket接口增强
+
+**更新** 新增字幕同步播放功能，支持音频播放队列管理和批次确认机制：
+
+- **音频消息**：`{"type": "audio", "url": "...", "text": "...", "batch_index": 0, "duration": 4}`
+- **字幕消息**：`{"type": "subtitle", "text": "...", "duration": 4, "batch_index": 0}`
+- **完成确认**：`{"type": "audio_done", "batch_index": 0}`
 
 ### 语音识别组件
 
@@ -97,6 +118,7 @@ participant API as FastAPI服务器
 participant ASR as Qwen3-ASR模型
 participant TTS as DashScope TTS
 participant WebSocket as WebSocket服务
+participant SubtitlePlayer as 字幕播放器
 Client->>API : GET /demo
 API-->>Client : 返回演示页面
 Client->>API : POST /transcribe (音频文件)
@@ -113,12 +135,17 @@ Client->>API : POST /tts (文本+语音)
 API->>TTS : 调用DashScope TTS
 TTS-->>API : 返回音频数据
 API-->>Client : 音频URL或Base64数据
+Client->>SubtitlePlayer : 连接 /ws/subtitle
+SubtitlePlayer-->>Client : {type : audio, url, text, batch_index}
+SubtitlePlayer->>SubtitlePlayer : 播放音频并显示字幕
+SubtitlePlayer-->>Client : {type : audio_done, batch_index}
 ```
 
 **图表来源**
 - [server.py:124-197](file://server.py#L124-L197)
 - [server.py:212-247](file://server.py#L212-L247)
 - [demo.html:494-564](file://demo.html#L494-L564)
+- [subtitle_player.html:265-297](file://subtitle_player.html#L265-L297)
 
 ## 详细组件分析
 
@@ -169,7 +196,7 @@ Vue->>Vue : 解析响应并播放音频
 
 ### WebSocket实时识别实现
 
-WebSocket实时识别采用滑动窗口+周期性整段转写的准实时方案：
+**更新** WebSocket实时识别现已增强，支持音频播放队列管理和字幕同步播放：
 
 ```mermaid
 flowchart TD
@@ -193,6 +220,34 @@ ContinueCapture --> Buffer
 **章节来源**
 - [server.py:124-197](file://server.py#L124-L197)
 - [demo.html:486-564](file://demo.html#L486-L564)
+
+### 字幕同步播放器实现
+
+**新增** 字幕同步播放器支持音频播放队列管理和批次确认机制：
+
+```mermaid
+flowchart TD
+Connect[连接WebSocket] --> ReceiveAudio[接收音频消息]
+ReceiveAudio --> Enqueue[加入播放队列]
+Enqueue --> PlayNext{有音频在播放?}
+PlayNext --> |否| PlayAudio[播放音频]
+PlayNext --> |是| Wait[等待队列]
+PlayAudio --> OnPlay[音频开始播放]
+OnPlay --> ShowSubtitle[显示字幕]
+ShowSubtitle --> OnEnd[音频播放结束]
+OnEnd --> HideSubtitle[隐藏字幕]
+HideSubtitle --> SendDone[发送完成确认]
+SendDone --> PlayNext
+PlayNext --> PlayAudio
+```
+
+**图表来源**
+- [subtitle_player.html:216-258](file://subtitle_player.html#L216-L258)
+- [subtitle_player.html:277-293](file://subtitle_player.html#L277-L293)
+
+**章节来源**
+- [subtitle_player.html:179-258](file://subtitle_player.html#L179-L258)
+- [subtitle_player.html:277-293](file://subtitle_player.html#L277-L293)
 
 ### Vue3组件集成模式
 
@@ -320,21 +375,27 @@ Vue3 --> FastAPI
 
 ### WebSocket性能优化
 
+**更新** 新增音频播放队列和批次管理优化：
+
 1. **滑动窗口设计**：最大窗口12秒，避免内存溢出
 2. **周期性转写**：默认1.2秒间隔，平衡延迟和资源消耗
 3. **音频格式优化**：16kHz单声道16bit PCM，减少传输开销
+4. **播放队列管理**：音频播放完成后自动清理队列，避免内存泄漏
+5. **批次确认机制**：通过`audio_done`消息实现精确的批次同步
 
 ### 响应处理优化
 
 1. **流式响应**：WebSocket支持partial结果，提升用户体验
 2. **缓存机制**：TTS音频文件缓存，避免重复生成
 3. **并发控制**：ASR转写加锁，防止并发冲突
+4. **字幕同步**：音频实际开始播放时才显示字幕，确保同步精度
 
 ### 前端性能优化
 
 1. **音频采样率转换**：实时降采样至16kHz
 2. **缓冲区管理**：动态调整缓冲区大小
 3. **错误恢复**：自动重连和状态恢复
+4. **用户交互优化**：首次点击后自动重试播放被阻止的音频
 
 ## 故障排除指南
 
@@ -357,12 +418,16 @@ ModelOK --> |否| FixModel[重新加载模型]
 ModelOK --> |是| CheckAudio{检查音频格式}
 CheckAudio --> AudioOK{音频格式正确?}
 AudioOK --> |否| FixAudio[转换音频格式]
-AudioOK --> |是| DebugMode[启用调试模式]
+AudioOK --> |是| CheckQueue{检查播放队列}
+CheckQueue --> QueueOK{队列管理正常?}
+QueueOK --> |否| FixQueue[修复队列问题]
+QueueOK --> |是| DebugMode[启用调试模式]
 FixNetwork --> Problem
 FixAPI --> Problem
 FixAuth --> Problem
 FixModel --> Problem
 FixAudio --> Problem
+FixQueue --> Problem
 DebugMode --> Problem
 ```
 
@@ -375,18 +440,22 @@ DebugMode --> Problem
 2. **后端日志**：查看Uvicorn访问日志
 3. **API测试工具**：Postman或curl测试API接口
 4. **音频分析工具**：检查PCM数据格式和采样率
+5. **WebSocket调试**：监控消息类型和批次索引
 
 **章节来源**
 - [README.md:194-204](file://README.md#L194-L204)
 
 ## 结论
 
-本指南提供了Vue3应用与FastAPI后端语音服务的完整集成方案。通过合理利用HTTP请求、WebSocket连接和错误处理机制，可以构建高性能的语音识别和合成应用。建议在生产环境中重点关注：
+本指南提供了Vue3应用与FastAPI后端语音服务的完整集成方案。通过合理利用HTTP请求、WebSocket连接和错误处理机制，可以构建高性能的语音识别和合成应用。
+
+**更新** 新增的WebSocket接口增强功能显著提升了用户体验，特别是音频播放队列管理和字幕同步播放功能，为多批次音频处理提供了可靠的解决方案。建议在生产环境中重点关注：
 
 1. **安全性**：合理配置CORS和认证机制
 2. **性能**：优化音频格式和传输策略
 3. **可靠性**：实现完善的错误处理和重试机制
 4. **可维护性**：保持代码结构清晰和文档完整
+5. **用户体验**：充分利用批次确认机制和字幕同步功能
 
 ## 附录
 
@@ -411,6 +480,7 @@ DebugMode --> Problem
 - **出站**：JSON消息
   - `{"type": "ready", ...}`
   - `{"type": "partial", "language": "...", "text": "..."}`
+  - `{"type": "error", "message": "..."}`
 
 #### TTS服务
 - **方法**：POST
@@ -419,6 +489,48 @@ DebugMode --> Problem
 - **请求体**：`{"text": "...", "voice": "Cherry"}`
 - **响应**：DashScope标准响应格式
 
+#### 字幕播放器（新增）
+- **方法**：WebSocket
+- **路径**：/ws/subtitle
+- **入站**：音频播放确认消息
+  - `{"type": "audio_done", "batch_index": 0}`
+- **出站**：音频和字幕消息
+  - `{"type": "audio", "url": "...", "text": "...", "batch_index": 0, "duration": 4}`
+  - `{"type": "subtitle", "text": "...", "duration": 4, "batch_index": 0}`
+
+### WebSocket消息协议
+
+**更新** 新增字幕同步播放的消息协议：
+
+#### 音频消息格式
+```json
+{
+  "type": "audio",
+  "url": "/audio/clip_001.wav",
+  "text": "这是第一段字幕内容",
+  "batch_index": 0,
+  "duration": 4.5
+}
+```
+
+#### 字幕消息格式
+```json
+{
+  "type": "subtitle",
+  "text": "这是纯字幕内容",
+  "duration": 3.2,
+  "batch_index": 1
+}
+```
+
+#### 完成确认消息格式
+```json
+{
+  "type": "audio_done",
+  "batch_index": 0
+}
+```
+
 ### Vue3集成最佳实践
 
 1. **组件化设计**：将音频功能封装为独立组件
@@ -426,3 +538,75 @@ DebugMode --> Problem
 3. **错误处理**：统一的错误处理和用户反馈
 4. **性能监控**：监控音频处理性能和用户体验
 5. **安全考虑**：避免在前端暴露敏感信息
+6. **批次管理**：利用批次索引实现精确的音频同步
+7. **队列控制**：合理管理音频播放队列，避免内存泄漏
+8. **用户交互**：处理音频播放被阻止的情况，提供友好的用户提示
+
+### WebSocket集成示例
+
+**更新** 新增字幕同步播放的WebSocket集成示例：
+
+```javascript
+// 连接字幕播放器WebSocket
+const ws = new WebSocket('ws://localhost:8000/ws/subtitle');
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  
+  switch (data.type) {
+    case 'audio':
+      // 处理音频消息
+      enqueueAudio(data);
+      break;
+    case 'subtitle':
+      // 处理字幕消息
+      showSubtitle(data.text, data.duration);
+      break;
+    case 'audio_done':
+      // 处理音频完成确认
+      handleAudioComplete(data.batch_index);
+      break;
+  }
+};
+
+// 音频队列管理函数
+function enqueueAudio(data) {
+  audioQueue.push(data);
+  playNextAudio();
+}
+
+function playNextAudio() {
+  if (isPlaying || audioQueue.length === 0) return;
+  
+  const audioData = audioQueue.shift();
+  isPlaying = true;
+  
+  // 创建音频元素并播放
+  const audio = new Audio(audioData.url);
+  audio.onplay = () => {
+    // 音频开始播放时显示字幕
+    showSubtitle(audioData.text, audioData.duration);
+  };
+  
+  audio.onended = () => {
+    // 音频播放结束时隐藏字幕并发送完成确认
+    hideSubtitle();
+    isPlaying = false;
+    
+    // 发送音频完成确认
+    ws.send(JSON.stringify({
+      type: 'audio_done',
+      batch_index: audioData.batch_index
+    }));
+    
+    playNextAudio(); // 播放下一个音频
+  };
+  
+  audio.play().catch(e => {
+    // 处理音频播放被阻止的情况
+    audioQueue.unshift(audioData);
+    isPlaying = false;
+    showUserPrompt();
+  });
+}
+```

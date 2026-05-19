@@ -20,6 +20,8 @@
 - [subtitles.json](file://subtitles.json)
 - [zmqserver.py](file://zmqserver.py)
 - [test_kokoro.py](file://test_kokoro.py)
+- [zmq_events.jsonl](file://zmq_events.jsonl)
+- [zmqtest.py](file://zmqtest.py)
 </cite>
 
 ## 更新摘要
@@ -28,6 +30,7 @@
 - 修正三线程并行流水线架构的描述，反映实际实现
 - 更新多后端TTS管理系统的当前状态
 - 修正实时TTS播放组件的架构说明
+- **新增** 增强事件批处理系统，支持更复杂的多团队运动场景，包括动作事件（raise_hand、squat、raise_hand+squat组合）和得分事件
 
 ## 目录
 1. [简介](#简介)
@@ -57,6 +60,8 @@
 
 **重要更新**：项目中的qwen-to-data7.py文件虽然仍存在于代码库中，但其原有的三线程并行流水线架构功能已被移除，当前仅保留基础的事件处理和TTS后端选择功能。
 
+**新增功能**：增强事件批处理系统，现已支持更复杂的多团队运动场景，包括动作事件（raise_hand、squat、raise_hand+squat组合）和得分事件的智能识别和处理。
+
 ## 项目结构
 
 ```mermaid
@@ -82,6 +87,7 @@ K[TTS音色目录<br/>tts_voices_catalog.json]
 L[提示词配置<br/>qwen-to-date-prompts.json]
 M[JSON Schema<br/>jsonschema.json]
 N[事件批处理<br/>qwen-to-data6.py]
+O[事件数据<br/>zmq_events.jsonl]
 end
 A --> B
 A --> C
@@ -96,6 +102,7 @@ K --> A
 L --> H
 M --> H
 N --> H
+O --> H
 ```
 
 **图表来源**
@@ -156,11 +163,37 @@ Queue-->>Gen : 下一批次处理
 - **回退策略**：sounddevice → kokoserver → dashscope
 - **手动指定**：支持命令行参数强制指定后端
 
-### 5. 事件批处理系统
+### 5. 增强事件批处理系统
 
-- **ZMQ实时订阅**：支持实时事件流处理
-- **批量处理**：按配置大小批量处理事件
-- **终局批次**：支持未满批次的特殊处理
+**新增功能**：系统现已支持更复杂的多团队运动场景，包括：
+
+- **动作事件处理**：支持raise_hand、squat、raise_hand+squat三种动作类型
+- **得分事件处理**：支持多团队得分场景，包含KO信息
+- **智能事件分类**：根据事件类型自动调整解说策略
+- **实时事件流**：通过ZMQ实时订阅和处理事件
+
+```mermaid
+flowchart TD
+subgraph "事件类型"
+A[动作事件] --> A1[raise_hand]
+A --> A2[squat]
+A --> A3[raise_hand+squat]
+B[得分事件] --> B1[score]
+end
+subgraph "事件处理流程"
+A1 --> C[生成攻防解说]
+A2 --> C
+A3 --> C
+B1 --> D[生成得分解说]
+C --> E[文本修订]
+D --> E
+E --> F[实时TTS合成]
+end
+```
+
+**图表来源**
+- [qwen-to-date-prompts.json:1-31](file://qwen-to-date-prompts.json#L1-L31)
+- [jsonschema.json:65-95](file://jsonschema.json#L65-L95)
 
 ### 6. 自动文本修订
 
@@ -195,6 +228,7 @@ participant Audio as 音频播放器
 participant Backend as 多后端调度
 participant Monitor as 性能监控
 participant Threads as 双线程流水线
+participant Events as 事件处理
 Client->>WebSocket : 建立WebSocket连接
 WebSocket->>Client : 发送ready状态
 Client->>WebSocket : 发送PCM音频数据
@@ -207,7 +241,8 @@ Backend->>Threads : 分发合成任务
 Threads->>TTS : 生成音频流
 TTS-->>Threads : 音频数据
 Threads-->>Audio : 实时播放音频
-TTS-->>Monitor : 记录性能指标
+Events->>Backend : 处理实时事件
+Events->>Monitor : 记录事件处理指标
 Monitor-->>Client : 发送性能报告
 ```
 
@@ -457,37 +492,93 @@ Closed --> [*]
 - [qwen-to-data7.py:1143-1183](file://qwen-to-data7.py#L1143-L1183)
 - [qwen-to-data7.py:1227-1288](file://qwen-to-data7.py#L1227-L1288)
 
-### 事件批处理系统
+### 增强事件批处理系统
 
-#### 批处理流程
+#### 事件类型支持
 
-系统支持ZMQ实时事件流的高效批处理：
+**新增功能**：系统现已支持以下事件类型：
+
+- **动作事件（action）**：
+  - `raise_hand`：抬手动作（代表发射能量球攻击）
+  - `squat`：下蹲动作（代表躲避防御）
+  - `raise_hand+squat`：抬手+下蹲组合动作（代表防御反击）
+
+- **得分事件（score）**：
+  - `score`：得分事件，包含得分方信息和KO触发信息
 
 ```mermaid
 flowchart LR
+subgraph "动作事件"
+A[raise_hand] --> A1[攻击动作]
+B[squat] --> B1[防御动作]
+C[raise_hand+squat] --> C1[反击动作]
+end
+subgraph "得分事件"
+D[score] --> D1[得分场景]
+D1 --> D2[红方得分]
+D1 --> D3[蓝方得分]
+D1 --> D4[KO触发]
+end
+```
+
+**图表来源**
+- [jsonschema.json:85-91](file://jsonschema.json#L85-L91)
+- [qwen-to-date-prompts.json:1-31](file://qwen-to-date-prompts.json#L1-L31)
+
+#### 事件处理流程
+
+```mermaid
+flowchart TD
 subgraph "事件收集"
 A[ZMQ订阅] --> B[事件缓冲]
 B --> C{达到批大小?}
 C --> |是| D[生成批处理]
 C --> |否| E[继续收集]
 end
+subgraph "事件分类"
+D --> F[动作事件分类]
+D --> G[得分事件分类]
+F --> F1[攻击/防御/反击]
+G --> G1[得分/KO信息]
+end
 subgraph "批处理执行"
-D --> F[调用LLM生成]
-F --> G[自动文本修订]
-G --> H{TTS后端选择}
-H --> I[实时TTS播放]
-H --> J[HTTP TTS请求]
+F1 --> H[调用LLM生成]
+G1 --> H
+H --> I[自动文本修订]
+I --> J{TTS后端选择}
+J --> K[实时TTS播放]
+J --> L[HTTP TTS请求]
 end
 subgraph "结果输出"
-I --> K[JSON结果]
-J --> K
-E --> L[终局批次处理]
-L --> K
+K --> M[JSON结果]
+L --> M
+E --> N[终局批次处理]
+N --> M
 end
 ```
 
 **图表来源**
 - [qwen-to-data7.py:1307-1391](file://qwen-to-data7.py#L1307-L1391)
+
+#### 事件统计和焦点分析
+
+系统会自动统计事件类型并确定叙述焦点：
+
+```mermaid
+stateDiagram-v2
+[*] --> AnalyzeEvents : 分析事件批次
+AnalyzeEvents --> CheckScores : 统计动作和得分数量
+CheckScores --> ActionDominant : 动作事件占主导
+CheckScores --> ScoreDominant : 得分事件占主导
+ActionDominant --> FocusAttackDefend : 以攻防为主
+ScoreDominant --> FocusScore : 以得分为主
+FocusAttackDefend --> GenerateNarration : 生成解说
+FocusScore --> GenerateNarration
+GenerateNarration --> [*]
+```
+
+**图表来源**
+- [qwen-to-data7.py:485-498](file://qwen-to-data7.py#L485-L498)
 
 #### 批处理配置
 
@@ -634,48 +725,52 @@ E[qwen-to-data4.py]
 F[qwen-to-data7.py]
 G[qwen-to-data6.py]
 H[test_kokoro.py]
+I[zmqtest.py]
+J[zmq_events.jsonl]
 end
 subgraph "音频处理库"
-I[dashscope]
-J[sounddevice]
-K[pydub]
-L[soundfile]
-M[pyzmq]
-N[kokoro]
+K[dashscope]
+L[sounddevice]
+M[pydub]
+N[soundfile]
+O[pyzmq]
+P[kokoro]
 end
 subgraph "AI模型"
-O[Qwen3-ASR]
-P[Qwen3-TTS]
-Q[Qwen Flash]
-R[Kokoro TTS]
+Q[Qwen3-ASR]
+R[Qwen3-TTS]
+S[Qwen Flash]
+T[Kokoro TTS]
 end
 subgraph "基础库"
-S[FastAPI]
-T[Pydantic]
-U[NumPy]
-V[PyTorch]
-W[Python-dotenv]
-X[threading]
-Y[queue]
+U[FastAPI]
+V[Pydantic]
+W[NumPy]
+X[PyTorch]
+Y[Python-dotenv]
+Z[threading]
+AA[queue]
+BB[zmq]
 end
-A --> I
-A --> O
-F --> I
-F --> J
+A --> K
+A --> Q
+F --> K
 F --> L
 F --> N
-G --> I
+F --> P
+G --> BB
 G --> J
-B --> I
-B --> J
-A --> S
-A --> T
-F --> U
-F --> W
-G --> U
+I --> BB
+B --> K
+B --> L
+A --> U
 A --> V
+F --> W
 F --> X
+G --> W
+A --> X
 F --> Y
+F --> Z
 ```
 
 **图表来源**
@@ -831,7 +926,18 @@ F --> Y
 - 调整线程优先级
 - 分析性能瓶颈
 
-#### 6. 性能监控问题
+#### 6. 事件处理问题
+
+**问题现象**：事件批处理失败或事件丢失
+
+**解决方案**：
+- 检查ZMQ连接状态
+- 验证事件格式正确性
+- 监控事件处理延迟
+- 查看事件统计信息
+- 分析事件分类准确性
+
+#### 7. 性能监控问题
 
 **问题现象**：性能指标不准确或缺失
 
@@ -852,13 +958,14 @@ F --> Y
 - **后端日志**：监控各后端的性能指标
 - **性能监控日志**：分析性能计时和错误统计
 - **线程状态日志**：监控双线程的运行状态
+- **事件处理日志**：分析事件批处理的性能
 
 #### 2. 性能监控
 
 - **内存使用**：监控内存使用情况，避免内存泄漏
 - **CPU使用率**：监控CPU使用率，优化处理逻辑
 - **网络延迟**：测量网络延迟，优化传输策略
-- **TTS延迟**：测量从事件到音频播放的端到端延迟
+- **TTS延迟**：测量端到端延迟
 - **HTTP往返时间**：跟踪API调用的响应时间
 - **队列深度**：监控播放队列积压情况
 
@@ -900,6 +1007,8 @@ F --> Y
 12. **动态语速调节**：根据队列深度自动调整合成速度
 
 **重要更新**：双线程并行流水线架构的引入，使得系统能够同时处理多个批次的音频合成任务，显著提升了整体吞吐量和响应性能。虽然原本计划的三线程架构（gen/tts/play）已被移除，但当前的双线程架构仍然能够有效处理实时语音应用场景，适用于生产环境的严格要求。
+
+**新增功能**：增强事件批处理系统现已支持复杂的多团队运动场景，包括动作事件（raise_hand、squat、raise_hand+squat组合）和得分事件的智能识别和处理，为体育赛事解说提供了更丰富的事件支持。
 
 项目的核心优势在于其实时性和高质量的音频处理能力，以及智能的多后端支持、自动纠错机制、全面的性能监控和强大的错误处理能力，适用于各种实时语音应用场景。通过合理的性能调优和错误处理机制，可以满足生产环境的严格要求。
 
@@ -1004,6 +1113,11 @@ MONITOR_INTERVAL=1.0
 # 线程配置
 THREAD_POOL_SIZE=4
 QUEUE_DEPTH_THRESHOLD=3
+
+# 事件处理配置
+QWEN_EVENTS_BATCH=10
+ZMQ_ENDPOINT=tcp://localhost:5557
+ZMQ_TOPIC=hado.event
 ```
 
 #### 2. 音色配置
@@ -1029,12 +1143,12 @@ QUEUE_DEPTH_THRESHOLD=3
 
 ```json
 {
-    "system": "你是一个专业的体育赛事解说员，擅长用生动的语言描述比赛场景。",
-    "user_note": "请生成简短有力的现场解说，适合实时播报。",
-    "forbidden_substrings": ["垃圾", "废物", "笨蛋"],
-    "forbidden_regexes": ["\\d+分钟"],
-    "final_only_substrings": ["最终比分"],
-    "revision_system": "请将违规内容重写为积极正面的表达，保持原意但更加专业。"
+    "system": "你是 HADO AR 竞技比赛的中文解说员。【输入】用户 JSON 含：说明、fragment_meta、fragment_stats（程序预统计的 action/score 条数与 narration_focus）、json_schema、events、forbidden_substrings、forbidden_regexes、final_only_substrings。务必先读 fragment_meta 与 fragment_stats.narration_focus。【事件含义】event_type 为 action 或 score。抬手=发射能量球攻击；下蹲=躲避防御；抬手+下蹲=防御反击。score 表示得分方得一分，可含 KO 信息。【选材与侧重——必须有"攻防画面"】- 先数本批 events 里 event_type 为 action 与 score 的条数（可与 fragment_stats 对照）。- 若本批没有 score，或 action 条数大于等于 score 条数：narration 必须以攻防为主，要激情高昂的解说词，活跃解说氛围。- 若本批有 score 且 score 明显是片段焦点（score 多于 action）：可以写得分解说，避免只报比分感。【输出】只返回一个 JSON 对象：{\"narration\":\"...\"}，不要 Markdown、不要其它键。【narration 硬性规则】1) 长度不超过 50 个字符（汉字/字母/数字/标点各算 1）。2) 不要特殊符号（不要用 * # 【】等）。3) narration 不得包含 forbidden_substrings 任一子串。4) narration 不得被 forbidden_regexes 中任一正则匹配（模型侧按字面理解这些模式，避免同义套话）。5) 仅当 is_final_batch 为 true 时，才允许出现 final_only_substrings 中的子串；否则禁止。6) 得分解说避免复读模板：不要用「又得一城」「连下N城」「击倒/倒下」类说法；换用「蓝方得分」「红方扳回一分」「双方僵持」等不重复、具体的短句。7) 若本批以普通攻防为主、无 score，不要写成连续得分或 KO 口吻。8) narration 中禁止写入视频时间码（禁止与 events 里 time 字段同形的 mm:ss.mmm，如 00:30.083）；不要「时间码+逗号+解说」式拼接，解说只写现场短句。",
+    "user_note": "以下为 HADO 视频识别事件片段（按文件顺序），请据此生成一条解说。请先粗数本批 action 与 score 条数：动作为主时必须写防御或进攻类现场短句，不要只写得分解说。请同时遵守 fragment_meta、forbidden_substrings、forbidden_regexes、final_only_substrings。",
+    "forbidden_substrings": ["再下一城","下一城","再进一分","又得一城","连下","倒下","倒地","倒地不起","轰然倒下","击倒","被击倒","击倒在地","锁定优势"],
+    "forbidden_regexes": ["连下[一二三四五六七八九十百千万两]+城","连得[一二三四五六七八九十百千万两]+分","连下[0-9]+城","连得[0-9]+分","\\d{2}:\\d{2}\\.\\d{3}"],
+    "final_only_substrings": ["制胜一击"],
+    "revision_system": "你是 HADO AR 竞技比赛实况解说员。请严格按用户 JSON 里的 violations 重写一条 narration。输出仍为单个 JSON：{\"narration\":\"...\"}，无其它键。重写时禁止把 events 中的 time（mm:ss.mmm）写进 narration，禁止时间码+逗号+正文；长度与禁用词规则与用户消息中的说明一致。"
 }
 ```
 
@@ -1056,6 +1170,10 @@ QUEUE_DEPTH_THRESHOLD=3
 | `/transcribe` | POST | 音频转写 |
 | `/tts` | POST | 语音合成 |
 | `/tts/voices` | GET | 音色列表 |
+| `/tts/edge-voices` | GET | Edge TTS音色列表 |
+| `/tts/edge-subtitle-voiceover` | POST | 字幕配音生成 |
+| `/tts/edge-subtitle-voiceover/link` | POST | 字幕配音链接生成 |
+| `/tts/edge-voiceover-files/{file_id}` | GET | 获取字幕配音文件 |
 
 #### 3. 命令行参数
 
@@ -1071,6 +1189,9 @@ QUEUE_DEPTH_THRESHOLD=3
 | `--kokoro-url` | str | http://localhost:8000 | Kokoro服务地址 |
 | `--kokoro-voice` | str | zm_yunxia | Kokoro音色 |
 | `--kokoro-speed` | float | 1.0 | Kokoro语速 |
+| `--zmq-endpoint` | str | tcp://localhost:5557 | ZMQ服务地址 |
+| `--zmq-topic` | str | hado.event | ZMQ订阅主题 |
+| `--ws-port` | int | 8765 | 字幕WebSocket端口 |
 
 ### 性能监控参考
 
@@ -1086,6 +1207,8 @@ QUEUE_DEPTH_THRESHOLD=3
 | batch_processing_time | float | 批处理时间（秒） | < 60s |
 | queue_depth | int | 播放队列深度 | < 5个批次 |
 | synthesis_speed | float | 合成速度倍率 | 0.5-2.0倍 |
+| event_processing_time | float | 事件处理时间（秒） | < 10s |
+| event_count | int | 处理事件数量 | > 0 |
 
 #### 2. 错误类型
 
@@ -1099,6 +1222,8 @@ QUEUE_DEPTH_THRESHOLD=3
 | ThreadDeadlock | 线程死锁 | 重启相关线程，检查同步机制 |
 | QueueOverflow | 队列溢出 | 调整队列大小，优化处理速度 |
 | PerformanceDegradation | 性能下降 | 监控CPU使用率，优化算法 |
+| EventProcessingError | 事件处理错误 | 重试事件处理，检查事件格式 |
+| ZMQConnectionError | ZMQ连接错误 | 重试连接，检查ZMQ服务 |
 
 #### 3. 双线程监控指标
 
@@ -1111,3 +1236,5 @@ QUEUE_DEPTH_THRESHOLD=3
 | queue_depth_level | enum | 队列深度等级 | 队列深度监控 |
 | thread_utilization | float | 线程利用率 | CPU使用率监控 |
 | throughput_bps | float | 吞吐量（字节/秒） | 性能计时统计 |
+| event_batch_size | int | 事件批大小 | 事件统计监控 |
+| event_processing_rate | float | 事件处理速率（事件/秒） | 事件统计监控 |
