@@ -253,6 +253,13 @@ python qwen-to-data7.py -b 3 --tts-backend kokoro --kokoro-voice zm_yunxia --zmq
 
 # 离线调试：从 JSONL 一次性读入事件（不走 ZMQ）
 python qwen-to-data7.py --input zmq_events.jsonl
+
+
+python zmqserver.py
+
+
+python qwen-to-data7.py -b 3 --tts-backend kokoro --kokoro-voice zm_yunxia --zmq-endpoint tcp://127.0.0.1:5557
+
 ```
 
 **退出**：在 ZMQ 模式下按 **Ctrl+C** 停止订阅；若缓冲区里不足一批的事件，会作为**最后一批**（`is_final_batch`）再调用一次模型。

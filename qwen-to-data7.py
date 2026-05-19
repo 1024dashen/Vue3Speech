@@ -54,6 +54,104 @@ load_dotenv()
 
 _TTS_UA = "Mozilla/5.0 (compatible; qwen-to-date/1.0)"
 
+# ----- 字幕 WebSocket 广播 -----
+
+try:
+    import asyncio as _asyncio
+    import websockets as _websockets
+    _ws_available = True
+except ImportError:
+    _ws_available = False
+
+_ws_clients: set = set()
+"""已连接的 WebSocket 客户端。"""
+_ws_loop: _asyncio.AbstractEventLoop | None = None
+"""WebSocket 事件循环（在后台线程运行）。"""
+_ws_audio_queue_depth: list[int] = [0]
+"""WS 模式下浏览器音频队列积压计数（可变容器，跨函数共享）。"""
+
+
+def _ws_broadcast(data: dict) -> None:
+    """向所有 WebSocket 客户端广播字幕数据（线程安全）。"""
+    if _ws_loop is None or not _ws_clients:
+        return
+    msg = json.dumps(data, ensure_ascii=False)
+    for ws in list(_ws_clients):
+        _asyncio.run_coroutine_threadsafe(ws.send(msg), _ws_loop)
+
+
+def _start_ws_server(ws_port: int, http_port: int) -> None:
+    """在后台线程启动 WebSocket 字幕服务 + HTTP 静态文件服务。"""
+    if not _ws_available:
+        return
+    import http.server as _http_mod
+
+    _ROOT_DIR = str(Path(__file__).resolve().parent)
+
+    async def _ws_handler(websocket) -> None:
+        _ws_clients.add(websocket)
+        try:
+            async for msg in websocket:
+                # 接收客户端回执（音频播放完毕）
+                try:
+                    data = json.loads(msg)
+                    if data.get("type") == "audio_done":
+                        _ws_audio_queue_depth[0] = max(0, _ws_audio_queue_depth[0] - 1)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        finally:
+            _ws_clients.discard(websocket)
+
+    async def _main() -> None:
+        global _ws_loop
+        _ws_loop = _asyncio.get_running_loop()
+        try:
+            async with await _websockets.serve(_ws_handler, "0.0.0.0", ws_port):
+                print(f"[字幕WS] WebSocket 服务已启动: ws://0.0.0.0:{ws_port}", flush=True)
+                await _asyncio.Future()  # 永远运行
+        except OSError as e:
+            print(f"[字幕WS] WebSocket 服务启动失败 (端口 {ws_port}): {e}", flush=True)
+            # 清空客户端集合，回退到本地播放
+            _ws_clients.clear()
+
+    def _run_ws() -> None:
+        _asyncio.run(_main())
+
+    # HTTP 静态文件服务（提供 HTML/视频/音频）
+    class _StaticHandler(_http_mod.SimpleHTTPRequestHandler):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, directory=_ROOT_DIR, **kw)
+        def log_message(self, fmt, *args):
+            pass  # 静默日志
+        extensions_map = {
+            **_http_mod.SimpleHTTPRequestHandler.extensions_map,
+            '.wav': 'audio/wav',
+            '.mp3': 'audio/mpeg',
+        }
+
+    def _run_http() -> None:
+        try:
+            # ThreadingHTTPServer 支持并发请求，避免大文件下载阻塞其他请求
+            server = _http_mod.ThreadingHTTPServer(("0.0.0.0", http_port), _StaticHandler)
+        except OSError as e:
+            print(f"[字幕WS] HTTP 服务启动失败 (端口 {http_port}): {e}", flush=True)
+            return
+        print(f"[字幕WS] HTTP 静态文件服务已启动: http://0.0.0.0:{http_port}", flush=True)
+        server.serve_forever()
+
+    # 启动两个后台线程
+    threading.Thread(target=_run_ws, name="qwen-to-data7-ws", daemon=True).start()
+    threading.Thread(target=_run_http, name="qwen-to-data7-http", daemon=True).start()
+    player_url = f"http://127.0.0.1:{http_port}/subtitle_player.html"
+    print(f"[字幕WS] 字幕播放器页面: {player_url}", flush=True)
+    # 延迟自动打开浏览器
+    def _open_browser():
+        time.sleep(1.5)  # 等待服务就绪
+        import webbrowser
+        webbrowser.open(player_url)
+        print(f"[字幕WS] 已自动打开浏览器", flush=True)
+    threading.Thread(target=_open_browser, name="qwen-to-data7-browser", daemon=True).start()
+
 _ROOT = Path(__file__).resolve().parent
 
 # ----- Kokoro 本地模型路径 -----
@@ -300,6 +398,17 @@ def process_one_batch(
             record["revision_still_invalid"] = False
 
         record["narration"] = narration
+        # 广播字幕给 WebSocket 客户端
+        # WS 音频模式：不在 LLM 阶段发纯字幕（等 TTS 完成后发 audio 消息时一起显示）
+        # 非 WS 模式或纯字幕模式：立即广播
+        if narration and str(narration).strip():
+            if not _ws_available or _ws_loop is None:
+                _ws_broadcast({
+                    "type": "subtitle",
+                    "batch_index": batch_index,
+                    "text": str(narration).strip(),
+                    "duration": 4.0,
+                })
         if record.get("policy_violations") and record.get("revision_violations"):
             print(
                 f"批次 {batch_index}: 首版违规 {record['policy_violations']!r}，"
@@ -683,6 +792,107 @@ def _detect_player_cmd() -> list[str] | None:
     if mpv:
         return [mpv, "--no-video", "--really-quiet"]
     return None
+
+
+class _ContinuousPlayer:
+    """持续音频播放器：维持单个 ffplay/mpv 进程，通过 stdin 管道连续喂入 PCM 数据。
+
+    所有音频段共享同一播放流，消除进程启停间隔，实现无缝衔接。
+    """
+
+    def __init__(self, sample_rate: int = 24000, channels: int = 1) -> None:
+        self.sample_rate = sample_rate
+        self.channels = channels
+        self._proc: subprocess.Popen | None = None
+        self._fallback_mode = False  # 管道不可用时回退
+
+    def _build_cmd(self) -> list[str] | None:
+        """构建 ffplay 或 mpv 的命令行参数。"""
+        global _cached_player_cmd
+        if _cached_player_cmd is None:
+            _cached_player_cmd = _detect_player_cmd()
+        if _cached_player_cmd is None:
+            return None
+        exe = _cached_player_cmd[0]
+        if exe.endswith("ffplay"):
+            return [
+                exe,
+                "-nodisp", "-autoexit",
+                "-loglevel", "quiet",
+                "-f", "s16le",
+                "-ar", str(self.sample_rate),
+                "-ac", str(self.channels),
+                "-i", "pipe:0",
+            ]
+        else:  # mpv
+            return [
+                exe, "--no-video", "--really-quiet",
+                "--demuxer=rawaudio", "--audio-format=s16le",
+                f"--audio-samplerate={self.sample_rate}",
+                f"--audio-channels={self.channels}",
+                "-",
+            ]
+
+    def _start_proc(self) -> None:
+        """启动播放子进程。"""
+        cmd = self._build_cmd()
+        if cmd is None:
+            self._fallback_mode = True
+            return
+        kw: dict = {"stdin": subprocess.PIPE, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+        if os.name == "nt" and hasattr(subprocess, "CREATE_NO_WINDOW"):
+            kw["creationflags"] = subprocess.CREATE_NO_WINDOW
+        try:
+            self._proc = subprocess.Popen(cmd, **kw)
+        except (FileNotFoundError, OSError) as exc:
+            print(f"[播放器] 启动失败，回退逐段模式: {exc}", flush=True)
+            self._fallback_mode = True
+
+    def _ensure_proc(self) -> None:
+        """确保播放进程存活，不在则重启。"""
+        if self._proc is not None and self._proc.poll() is None:
+            return
+        self._start_proc()
+
+    def write(self, audio: "np.ndarray", silence_gap: float = 0.08) -> None:
+        """将 numpy float32 音频写入播放管道，段间自动插入短静音防爆音。"""
+        if self._fallback_mode:
+            _play_audio_pipe(audio, self.sample_rate)
+            return
+        self._ensure_proc()
+        if self._proc is None or self._proc.stdin is None:
+            return
+        # float32 → int16
+        pcm = (np.clip(audio, -1.0, 1.0) * 32767).astype(np.int16)
+        # 插入短静音防止段衔接处爆音
+        gap_samples = int(self.sample_rate * silence_gap * self.channels)
+        if gap_samples > 0:
+            silence = np.zeros(gap_samples, dtype=np.int16)
+            pcm_bytes = silence.tobytes() + pcm.tobytes()
+        else:
+            pcm_bytes = pcm.tobytes()
+        try:
+            self._proc.stdin.write(pcm_bytes)
+            self._proc.stdin.flush()
+        except (BrokenPipeError, OSError):
+            # 进程已退出，回退逐段模式
+            self.close()
+            self._fallback_mode = True
+            _play_audio_pipe(audio, self.sample_rate)
+
+    def close(self) -> None:
+        """关闭管道并等待播放进程播完剩余缓冲。"""
+        if self._proc is not None:
+            try:
+                if self._proc.stdin:
+                    self._proc.stdin.close()
+            except (BrokenPipeError, OSError):
+                pass
+            try:
+                self._proc.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                self._proc.kill()
+            self._proc = None
 
 
 def _play_audio_pipe(audio: "np.ndarray", sample_rate: int = 24000) -> None:
@@ -1305,6 +1515,12 @@ def main() -> None:
         default=float(os.getenv("KOKORO_SPEED", "1.0")),
         help="Kokoro TTS 语速倍率，默认 1.0；也可用环境变量 KOKORO_SPEED 设置。",
     )
+    parser.add_argument(
+        "--ws-port",
+        type=int,
+        default=int(os.getenv("WS_PORT", "8765")),
+        help="字幕 WebSocket 服务端口（默认 8765）；浏览器连接 ws://host:port 实时接收字幕与音频。",
+    )
     args = parser.parse_args()
     args.realtime_tts_finish_wait = max(
         3.0, min(120.0, float(args.realtime_tts_finish_wait))
@@ -1424,6 +1640,12 @@ def main() -> None:
 
     size = max(1, args.batch_size)
     results: list[dict] = []
+
+    # 启动字幕 WebSocket 服务
+    if _ws_available:
+        _start_ws_server(ws_port=args.ws_port, http_port=args.ws_port + 1)
+    else:
+        print("[字幕WS] websockets 未安装，字幕广播不可用；pip install websockets 启用", flush=True)
     if events is not None:
         total_batches = (len(events) + size - 1) // size
         print(
@@ -1563,21 +1785,31 @@ def main() -> None:
             _cached_voice_path = resolve_kokoro_voice_path(args.kokoro_voice)
 
         def _playback_worker() -> None:
-            """专职播放线程：从队列取音频数组，管道直传 ffplay/mpv，不阻塞合成线程。"""
-            while True:
-                item = _play_queue.get()
-                try:
-                    if item is None:
-                        return
-                    audio_arr, _dur, _bi = item
-                    _play_audio_pipe(audio_arr)
-                except Exception as exc:
-                    print(f"[播放线程] 批次 {_bi} 播放失败: {exc}", flush=True)
-                finally:
-                    _play_queue.task_done()
+            """专职本地播放线程：持续 PCM 播放（仅 WS 不可用时启用）。"""
+            player = _ContinuousPlayer(sample_rate=24000, channels=1)
+            try:
+                while True:
+                    item = _play_queue.get()
+                    try:
+                        if item is None:
+                            player.close()
+                            return
+                        audio_arr, _dur, _bi = item
+                        player.write(audio_arr)
+                    except Exception as exc:
+                        print(f"[播放线程] 批次 {_bi} 播放失败: {exc}", flush=True)
+                    finally:
+                        _play_queue.task_done()
+            finally:
+                player.close()
+
+        # kokoro + WS 可用时，音频通过浏览器播放，无需本地播放线程
+        # 等待确认 WS 服务已成功启动
+        time.sleep(0.5)
+        _use_ws_playback = effective_backend == "kokoro" and _ws_available and _ws_loop is not None and bool(_ws_clients is not None)
 
         _t_play: threading.Thread | None = None
-        if effective_backend == "kokoro":
+        if effective_backend == "kokoro" and not _use_ws_playback:
             _t_play = threading.Thread(
                 target=_playback_worker, name="qwen-to-data7-play", daemon=False
             )
@@ -1590,7 +1822,7 @@ def main() -> None:
                     try:
                         if job is None:
                             # 合成结束，通知播放线程退出
-                            if effective_backend == "kokoro":
+                            if effective_backend == "kokoro" and not _use_ws_playback:
                                 _play_queue.put(None)
                             return
                         bi, narration_text, voice, tts_inst = job
@@ -1600,7 +1832,10 @@ def main() -> None:
                                 _t0 = time.perf_counter()
                                 # 动态语速：播放队列积压时自动加速
                                 _base_speed = args.kokoro_speed
-                                _queue_depth = _play_queue.qsize()
+                                if _use_ws_playback:
+                                    _queue_depth = _ws_audio_queue_depth[0]
+                                else:
+                                    _queue_depth = _play_queue.qsize()
                                 _speed = _base_speed
                                 if _queue_depth >= 6:
                                     _speed = min(_base_speed * 1.80, 2.0)
@@ -1649,7 +1884,21 @@ def main() -> None:
                                     results[bi]["tts_playback"] = "kokoro_local"
                                     persist_results()
                                 # 直接传 numpy 数组到播放队列，管道直传播放，跳过磁盘 I/O
-                                _play_queue.put((audio_full, _audio_dur, bi))
+                                if _use_ws_playback:
+                                    # WS 模式：广播音频 URL 给浏览器播放
+                                    audio_rel = f"/kokoro_output/{output_name}"
+                                    _ws_audio_queue_depth[0] += 1
+                                    _ws_broadcast({
+                                        "type": "audio",
+                                        "batch_index": bi,
+                                        "url": audio_rel,
+                                        "duration": round(_audio_dur, 2),
+                                        "text": narration_text,
+                                        "queue_depth": _ws_audio_queue_depth[0],
+                                    })
+                                else:
+                                    # 本地播放模式
+                                    _play_queue.put((audio_full, _audio_dur, bi))
                             else:  # dashscope
                                 _t0 = time.perf_counter()
                                 audio_url, tts_payload = narration_dashscope_tts_audio_url(
@@ -1709,6 +1958,19 @@ def main() -> None:
         if _t_play is not None:
             _t_play.join()
         print("解说线程与 TTS 线程均已结束", flush=True)
+        # WS 模式下：主线程需保持存活，以便 HTTP/WS 服务继续运行（浏览器可能还在播放）
+        if _use_ws_playback:
+            print("[主线程] 等待浏览器播放完成（Ctrl+C 退出）…", flush=True)
+            try:
+                while True:
+                    time.sleep(1)
+                    # 浏览器音频队列清零说明所有音频已播完
+                    if _ws_audio_queue_depth[0] <= 0:
+                        print("[主线程] 浏览器音频已全部播放完毕，3 秒后自动退出…", flush=True)
+                        time.sleep(3)
+                        break
+            except KeyboardInterrupt:
+                print("\n[主线程] 用户中断，退出", flush=True)
 
 
 if __name__ == "__main__":

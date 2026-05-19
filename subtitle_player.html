@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>解说字幕播放器</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: rgba(255,255,255,0.06);
+      --border: rgba(255,255,255,0.12);
+      --text: rgba(255,255,255,0.92);
+      --muted: rgba(255,255,255,0.55);
+      --accent: #6ea8fe;
+      --ok: #51cf66;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    h1 { font-size: 1.4rem; margin-bottom: 16px; font-weight: 600; }
+    .player-wrap {
+      position: relative;
+      width: 100%;
+      max-width: 960px;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    video {
+      display: block;
+      width: 100%;
+      max-height: 70vh;
+      object-fit: contain;
+    }
+    .subtitle-overlay {
+      position: absolute;
+      bottom: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 85%;
+      text-align: center;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .subtitle-text {
+      display: inline-block;
+      padding: 8px 20px;
+      background: rgba(0,0,0,0.75);
+      border-radius: 8px;
+      font-size: 1.3rem;
+      line-height: 1.6;
+      color: #fff;
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+      transition: opacity 0.3s ease;
+    }
+    .subtitle-text.hidden { opacity: 0; }
+    .history-panel {
+      width: 100%;
+      max-width: 960px;
+      margin-top: 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 18px;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+    .history-panel h3 { font-size: 0.85rem; color: var(--muted); margin-bottom: 8px; }
+    .history-item {
+      padding: 4px 0;
+      font-size: 0.9rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 10px;
+    }
+    .history-item:last-child { border-bottom: none; }
+    .history-time { color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 52px; }
+    .history-text { color: var(--text); }
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.3s;
+    }
+    .status-dot.connected { background: var(--ok); }
+    .status-dot.disconnected { background: #ff6b6b; }
+    .config-bar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .config-bar label { font-size: 0.82rem; color: var(--muted); }
+    .config-bar input {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      width: 220px;
+    }
+    .config-bar button {
+      padding: 5px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .config-bar button:hover { background: rgba(255,255,255,0.1); }
+  </style>
+</head>
+<body>
+
+<h1>解说字幕播放器</h1>
+
+<div class="config-bar">
+  <label>WS:</label>
+  <input id="wsUrl" type="text" value="ws://127.0.0.1:8765" />
+  <button id="btnConnect" onclick="connectWS()">连接</button>
+  <button id="btnDisconnect" onclick="disconnectWS()" disabled>断开</button>
+  <label>视频:</label>
+  <input id="videoSrc" type="text" value="/static/test.mp4" style="width:180px" />
+  <button onclick="setVideo()">加载</button>
+</div>
+
+<div class="player-wrap">
+  <video id="video" src="/static/test.mp4" controls muted></video>
+  <div class="subtitle-overlay">
+    <span id="subtitleText" class="subtitle-text hidden"></span>
+  </div>
+</div>
+
+<div class="status-bar">
+  <span id="statusDot" class="status-dot disconnected"></span>
+  <span id="statusText">未连接</span>
+  <span id="audioStatus" style="margin-left:12px;color:var(--ok)"></span>
+</div>
+
+<div class="history-panel">
+  <h3>字幕历史</h3>
+  <div id="historyList"></div>
+</div>
+
+<script>
+  const video = document.getElementById('video');
+  const subtitleEl = document.getElementById('subtitleText');
+  const historyList = document.getElementById('historyList');
+  const statusDot = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+  const audioStatus = document.getElementById('audioStatus');
+  const btnConnect = document.getElementById('btnConnect');
+  const btnDisconnect = document.getElementById('btnDisconnect');
+  const wsUrlInput = document.getElementById('wsUrl');
+
+  let ws = null;
+  let subtitleTimer = null;
+
+  // 音频播放队列
+  const audioQueue = [];
+  let isPlaying = false;
+  let audioUnlocked = false;  // 用户交互后解锁
+
+  // 首次用户点击后重试播放
+  document.addEventListener('click', () => {
+    if (!isPlaying && audioQueue.length > 0) {
+      playNextAudio();
+    }
+  });
+
+  function setStatus(connected) {
+    statusDot.className = 'status-dot ' + (connected ? 'connected' : 'disconnected');
+    statusText.textContent = connected ? '已连接' : '未连接';
+    btnConnect.disabled = connected;
+    btnDisconnect.disabled = !connected;
+  }
+
+  function showSubtitle(text, durationSec) {
+    subtitleEl.textContent = text;
+    subtitleEl.classList.remove('hidden');
+    if (subtitleTimer) clearTimeout(subtitleTimer);
+    const ms = Math.max((durationSec || 4) * 1000, 1500);
+    subtitleTimer = setTimeout(() => {
+      subtitleEl.classList.add('hidden');
+    }, ms);
+  }
+
+  function addHistory(batchIndex, text) {
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    const time = video.currentTime ? video.currentTime.toFixed(1) + 's' : '--';
+    item.innerHTML = `<span class="history-time">[${batchIndex}] ${time}</span><span class="history-text">${text}</span>`;
+    historyList.prepend(item);
+  }
+
+  // 音频队列播放器
+  function playNextAudio() {
+    if (isPlaying || audioQueue.length === 0) return;
+    isPlaying = true;
+    const { url, text, batchIndex, duration } = audioQueue.shift();
+    audioStatus.textContent = `▶ 批次 ${batchIndex}`;
+    // 构建完整 URL（页面端口 8766，音频在同一 HTTP 服务上）
+    const fullUrl = url.startsWith('http') ? url : `http://${location.hostname}:${location.port}${url}`;
+    console.log('[音频] 播放:', fullUrl);
+    const audio = new Audio(fullUrl);
+    // 音频实际开始播放时才显示字幕，保证字幕与声音同步
+    audio.onplay = () => {
+      showSubtitle(text || '', duration || 4);
+      addHistory(batchIndex, text || '');
+    };
+    audio.onended = () => {
+      // 音频播完时隐藏字幕
+      subtitleEl.classList.add('hidden');
+      isPlaying = false;
+      audioStatus.textContent = '';
+      // 通知服务端音频播放完毕
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'audio_done', batch_index: batchIndex }));
+      }
+      playNextAudio();
+    };
+    audio.onerror = (e) => {
+      console.error('音频播放失败:', fullUrl, e);
+      subtitleEl.classList.add('hidden');
+      isPlaying = false;
+      audioStatus.textContent = '';
+      playNextAudio();
+    };
+    audio.play().then(() => {
+      audioUnlocked = true;
+    }).catch(e => {
+      console.warn('音频播放被阻止（等待用户交互）:', e);
+      // autoplay 被阻止：把音频放回队列头部，等待用户点击
+      audioQueue.unshift({ url, text, batchIndex, duration });
+      isPlaying = false;
+      audioStatus.textContent = '⚠ 点击页面以启用音频';
+    });
+  }
+
+  function enqueueAudio(data) {
+    audioQueue.push(data);
+    playNextAudio();
+  }
+
+  function connectWS() {
+    if (ws) ws.close();
+    const url = wsUrlInput.value.trim();
+    if (!url) return;
+    ws = new WebSocket(url);
+
+    ws.onopen = () => {
+      setStatus(true);
+      // 首次连接时自动播放视频
+      if (video.paused) video.play().catch(() => {});
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'audio') {
+          // 音频消息：入队播放（字幕在音频实际播放时才显示，此处不提前显示）
+          enqueueAudio(data);
+        } else if (data.type === 'subtitle') {
+          // 纯字幕消息（无音频）立即显示
+          showSubtitle(data.text, data.duration);
+          addHistory(data.batch_index ?? '?', data.text);
+        }
+      } catch (e) {
+        if (event.data && typeof event.data === 'string') {
+          showSubtitle(event.data, 4);
+        }
+      }
+    };
+
+    ws.onclose = () => setStatus(false);
+    ws.onerror = () => setStatus(false);
+  }
+
+  function disconnectWS() {
+    if (ws) { ws.close(); ws = null; }
+    setStatus(false);
+  }
+
+  function setVideo() {
+    const src = document.getElementById('videoSrc').value.trim();
+    if (src) video.src = src;
+  }
+
+  // 从 URL 自动推导 WS 地址并连接
+  (function autoConnect() {
+    const host = location.hostname || '127.0.0.1';
+    const wsPort = 8765;
+    wsUrlInput.value = `ws://${host}:${wsPort}`;
+    // 延迟一点连接，等页面就绪
+    setTimeout(connectWS, 500);
+  })();
+
+  // 自动播放视频
+  video.addEventListener('canplay', () => {
+    video.play().catch(() => {});
+  });
+</script>
+
+</body>
+</html>
