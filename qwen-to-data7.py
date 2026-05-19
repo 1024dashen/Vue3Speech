@@ -1602,15 +1602,20 @@ def main() -> None:
                                 _base_speed = args.kokoro_speed
                                 _queue_depth = _play_queue.qsize()
                                 _speed = _base_speed
-                                if _queue_depth >= 2:
-                                    _speed = min(_base_speed * 1.3, 2.0)
+                                if _queue_depth >= 6:
+                                    _speed = min(_base_speed * 1.80, 2.0)
+                                elif _queue_depth >= 4:
+                                    _speed = min(_base_speed * 1.50, 2.0)
+                                elif _queue_depth >= 2:
+                                    _speed = min(_base_speed * 1.30, 2.0)
+                                elif _queue_depth == 1:
+                                    _speed = min(_base_speed * 1.15, 2.0)
+                                if _speed > _base_speed:
                                     print(
                                         f"[TTS] 批次 {bi} 播放队列积压({_queue_depth})，"
                                         f"语速 {_base_speed} → {_speed:.2f}",
                                         flush=True,
                                     )
-                                elif _queue_depth == 1:
-                                    _speed = min(_base_speed * 1.15, 2.0)
 
                                 generator = kokoro_pipeline(
                                     narration_text,

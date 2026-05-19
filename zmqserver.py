@@ -18,7 +18,7 @@ def main() -> None:
         default=Path("zmq_events.jsonl"),
         help="NDJSON 事件文件，每行一个 JSON 对象",
     )
-    parser.add_argument("--interval", type=float, default=2.0, help="两条消息之间的间隔（秒）")
+    parser.add_argument("--interval", type=float, default=1.0, help="两条消息之间的间隔（秒）")
     parser.add_argument(
         "--once",
         action="store_true",
