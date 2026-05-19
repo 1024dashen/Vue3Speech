@@ -8,6 +8,7 @@
 - [demo.html](file://demo.html)
 - [ttstest.py](file://ttstest.py)
 - [qwen-to-data4.py](file://qwen-to-data4.py)
+- [qwen-to-data5.py](file://qwen-to-data5.py)
 - [qwen-to-data6.py](file://qwen-to-data6.py)
 - [qwen-to-data7.py](file://qwen-to-data7.py)
 - [requirements.txt](file://requirements.txt)
@@ -22,10 +23,11 @@
 
 ## 更新摘要
 **变更内容**
-- 增强了Qwen-to-Data7处理能力，改进了实时TTS合成性能监控和错误处理机制
-- 增加了详细的性能计时测量和HTTP往返时间跟踪
+- 从基于WebSocket的实时流式合成架构转向基于本地文件的批量合成架构
+- 保留了性能监控和错误处理机制，增强了HTTP往返时间跟踪
 - 改进了实时TTS回调处理和错误恢复机制
 - 优化了实时TTS播放器的性能监控和状态管理
+- 新增了多后端TTS管理和事件批处理系统
 
 ## 目录
 1. [简介](#简介)
@@ -98,7 +100,7 @@ M --> H
 - [server.py:1-452](file://server.py#L1-L452)
 - [demo.html:1-685](file://demo.html#L1-L685)
 - [qwen3stream.py:1-196](file://qwen3stream.py#L1-L196)
-- [qwen-to-data7.py:1-1506](file://qwen-to-data7.py#L1-L1506)
+- [qwen-to-data7.py:1-1603](file://qwen-to-data7.py#L1-L1603)
 
 **章节来源**
 - [README.md:1-287](file://README.md#L1-L287)
