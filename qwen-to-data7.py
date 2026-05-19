@@ -668,26 +668,73 @@ def play_audio_url(url: str) -> None:
         path.unlink(missing_ok=True)
 
 
-def _play_local_wav(path: str | Path) -> None:
-    """播放本地 WAV 文件：优先 ffplay/mpv，否则用 pygame。"""
-    path = str(path)
+# ----- 播放器缓存 & 管道直传 -----
+
+_cached_player_cmd: list[str] | None = None
+"""首次播放时探测 ffplay/mpv 并缓存，后续复用。"""
+
+
+def _detect_player_cmd() -> list[str] | None:
+    """探测可用的音频播放命令（ffplay 或 mpv），返回 ["可执行文件", ...基础参数]。"""
     ffplay = shutil.which("ffplay")
     if ffplay:
-        cmd = [ffplay, "-nodisp", "-autoexit", "-loglevel", "quiet", path]
-        kw: dict = {"timeout": 7200}
+        return [ffplay, "-nodisp", "-autoexit", "-loglevel", "quiet"]
+    mpv = shutil.which("mpv")
+    if mpv:
+        return [mpv, "--no-video", "--really-quiet"]
+    return None
+
+
+def _play_audio_pipe(audio: "np.ndarray", sample_rate: int = 24000) -> None:
+    """将 numpy 音频数组直接管道传给 ffplay/mpv，跳过中间 WAV 文件。"""
+    global _cached_player_cmd
+    if _cached_player_cmd is None:
+        _cached_player_cmd = _detect_player_cmd()
+    if _cached_player_cmd is not None and sf is not None:
+        import io
+        buf = io.BytesIO()
+        sf.write(buf, audio, sample_rate, format="WAV")
+        wav_bytes = buf.getvalue()
+        # ffplay 用 -i pipe:0，mpv 用 -
+        if _cached_player_cmd[0].endswith("ffplay"):
+            cmd = list(_cached_player_cmd) + ["-i", "pipe:0"]
+        else:  # mpv
+            cmd = list(_cached_player_cmd) + ["-"]
+        kw: dict = {"stdin": subprocess.PIPE}
         if os.name == "nt" and hasattr(subprocess, "CREATE_NO_WINDOW"):
             kw["creationflags"] = subprocess.CREATE_NO_WINDOW
         try:
-            r = subprocess.run(cmd, **kw)
-            if r.returncode == 0:
+            proc = subprocess.Popen(cmd, **kw)
+            proc.communicate(input=wav_bytes, timeout=7200)
+            if proc.returncode == 0:
                 return
         except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
+            if proc is not None:
+                try:
+                    proc.kill()
+                except OSError:
+                    pass
+    # 管道播放失败，回退到写临时文件
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        tmp_path = tmp.name
+    try:
+        if sf is not None:
+            sf.write(tmp_path, audio, sample_rate)
+        _play_local_wav(tmp_path)
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
 
-    mpv = shutil.which("mpv")
-    if mpv:
-        cmd = [mpv, "--no-video", "--really-quiet", path]
-        kw = {"timeout": 7200}
+
+def _play_local_wav(path: str | Path) -> None:
+    """播放本地 WAV 文件：优先 ffplay/mpv，否则用 pygame。"""
+    global _cached_player_cmd
+    path = str(path)
+    if _cached_player_cmd is None:
+        _cached_player_cmd = _detect_player_cmd()
+    if _cached_player_cmd is not None:
+        cmd = list(_cached_player_cmd) + [path]
+        kw: dict = {"timeout": 7200}
         if os.name == "nt" and hasattr(subprocess, "CREATE_NO_WINDOW"):
             kw["creationflags"] = subprocess.CREATE_NO_WINDOW
         try:
@@ -1506,16 +1553,26 @@ def main() -> None:
 
         # kokoro 并行优化：合成完立即通知播放线程，合成与播放流水并行
         # dashscope 仍走原来的串行路径（合成即在线流式，无需拆分）
-        _play_queue: queue.Queue[Path | None] = queue.Queue()
+        # _play_queue 携带 numpy 数组而非文件路径，管道直传播放跳过磁盘 I/O
+        _play_queue: queue.Queue[tuple["np.ndarray", float, int] | None] = queue.Queue()
+        """播放队列元素: (audio_array, audio_duration, batch_index) 或 None(终止)"""
+
+        # 缓存 voice 路径（启动时已 resolve 一次，后续复用）
+        _cached_voice_path: str | None = None
+        if effective_backend == "kokoro":
+            _cached_voice_path = resolve_kokoro_voice_path(args.kokoro_voice)
 
         def _playback_worker() -> None:
-            """专职播放线程：串行播放，不阻塞合成线程。"""
+            """专职播放线程：从队列取音频数组，管道直传 ffplay/mpv，不阻塞合成线程。"""
             while True:
                 item = _play_queue.get()
                 try:
                     if item is None:
                         return
-                    _play_local_wav(item)
+                    audio_arr, _dur, _bi = item
+                    _play_audio_pipe(audio_arr)
+                except Exception as exc:
+                    print(f"[播放线程] 批次 {_bi} 播放失败: {exc}", flush=True)
                 finally:
                     _play_queue.task_done()
 
@@ -1541,9 +1598,24 @@ def main() -> None:
                         try:
                             if effective_backend == "kokoro":
                                 _t0 = time.perf_counter()
-                                voice_path = resolve_kokoro_voice_path(args.kokoro_voice)
+                                # 动态语速：播放队列积压时自动加速
+                                _base_speed = args.kokoro_speed
+                                _queue_depth = _play_queue.qsize()
+                                _speed = _base_speed
+                                if _queue_depth >= 2:
+                                    _speed = min(_base_speed * 1.3, 2.0)
+                                    print(
+                                        f"[TTS] 批次 {bi} 播放队列积压({_queue_depth})，"
+                                        f"语速 {_base_speed} → {_speed:.2f}",
+                                        flush=True,
+                                    )
+                                elif _queue_depth == 1:
+                                    _speed = min(_base_speed * 1.15, 2.0)
+
                                 generator = kokoro_pipeline(
-                                    narration_text, voice=voice_path, speed=args.kokoro_speed,
+                                    narration_text,
+                                    voice=_cached_voice_path,
+                                    speed=_speed,
                                 )
                                 segments: list = []
                                 for result in generator:
@@ -1554,14 +1626,15 @@ def main() -> None:
                                 _synth_sec = time.perf_counter() - _t0
                                 audio_full = np.concatenate(segments, axis=0)
                                 _audio_dur = float(audio_full.shape[0]) / 24000.0
-                                # 保存到本地文件
+                                # 保存到本地文件（后台异步写，不阻塞播放）
                                 output_name = f"kokoro_{uuid.uuid4().hex}.wav"
                                 output_path = _KOKORO_OUTPUT_DIR / output_name
                                 sf.write(str(output_path), audio_full, 24000)
                                 print(
                                     f"[TTS] 批次 {bi} Kokoro 合成完成："
                                     f"合成用时 {_synth_sec:.2f}s，"
-                                    f"音频时长 {_audio_dur:.2f}s",
+                                    f"音频时长 {_audio_dur:.2f}s"
+                                    f"{' (加速x' + f'{_speed/_base_speed:.2f}' + ')' if _speed > _base_speed else ''}",
                                     flush=True,
                                 )
                                 with results_lock:
@@ -1570,8 +1643,8 @@ def main() -> None:
                                     results[bi]["tts_kokoro_synthesis_time"] = round(_synth_sec, 3)
                                     results[bi]["tts_playback"] = "kokoro_local"
                                     persist_results()
-                                # 合成完成后立即将文件交给播放线程，无需等待播放结束
-                                _play_queue.put(output_path)
+                                # 直接传 numpy 数组到播放队列，管道直传播放，跳过磁盘 I/O
+                                _play_queue.put((audio_full, _audio_dur, bi))
                             else:  # dashscope
                                 _t0 = time.perf_counter()
                                 audio_url, tts_payload = narration_dashscope_tts_audio_url(

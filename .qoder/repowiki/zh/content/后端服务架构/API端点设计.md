@@ -13,6 +13,7 @@
 - [ttstest.py](file://ttstest.py)
 - [qwen-to-data7.py](file://qwen-to-data7.py)
 - [kokoserver.py](file://kokoserver.py)
+- [test_kokoro.py](file://test_kokoro.py)
 </cite>
 
 ## 目录
@@ -33,6 +34,7 @@
 - WebSocket端点：连接协议、消息格式与状态管理
 - 语音合成端点：DashScope、Edge TTS与Kokoro TTS的集成方式
 - 字幕配音端点：时间轴处理、变速算法与输出格式
+- **新增** Kokoro TTS端点：同步与流式语音合成
 - 请求示例、响应格式与错误代码说明
 
 ## 项目结构
@@ -88,7 +90,7 @@ K --> KK
 - Qwen ASR模型：本地或Hub加载，支持批量音频识别与WebSocket实时识别
 - DashScope TTS：HTTP接口与实时WebSocket接口，支持多种音色与指令
 - Edge TTS：音色查询与字幕配音生成，支持变速与静音对齐
-- Kokoro TTS：本地化中文语音合成，支持同步与流式TTS
+- **新增** Kokoro TTS：本地化中文语音合成，支持同步与流式TTS
 - 演示页面：浏览器端录音、实时识别与TTS播放
 
 **章节来源**
@@ -440,7 +442,7 @@ API-->>Client : FileResponse MP3
 - qwen-asr：ASR推理
 - dashscope：DashScope TTS与实时TTS
 - edge-tts：Edge TTS音色查询与合成
-- kokoro：Kokoro TTS本地合成
+- kokoro：**新增** Kokoro TTS本地合成
 - pydub：音频处理（变速、拼接）
 - ffmpeg：音频转码与变速
 - python-dotenv：加载.env环境变量

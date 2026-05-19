@@ -19,15 +19,16 @@
 - [qwen-flash.json](file://qwen-flash.json)
 - [subtitles.json](file://subtitles.json)
 - [zmqserver.py](file://zmqserver.py)
+- [test_kokoro.py](file://test_kokoro.py)
 </cite>
 
 ## 更新摘要
 **变更内容**
-- 从基于WebSocket的实时流式合成架构转向基于本地文件的批量合成架构
-- 保留了性能监控和错误处理机制，增强了HTTP往返时间跟踪
-- 改进了实时TTS回调处理和错误恢复机制
-- 优化了实时TTS播放器的性能监控和状态管理
-- 新增了多后端TTS管理和事件批处理系统
+- 从串行处理架构升级为三线程并行流水线架构
+- 新增 gen_worker（生成）、tts_worker（合成）和 _playback_worker（播放）三个线程
+- 显著提升 Kokoro 后端的吞吐量和响应性能
+- 实现生成、合成和播放的流水线并行处理
+- 优化队列管理和动态语速调节机制
 
 ## 目录
 1. [简介](#简介)
@@ -55,7 +56,7 @@
 - **性能监控**：详细的性能计时测量和HTTP往返时间跟踪
 - **错误处理**：完善的错误恢复机制和超时处理
 
-项目的核心特色在于实现了真正的实时TTS合成，支持边收边播的音频流处理，具有低延迟和高质量的特点，并具备智能的多后端支持、自动纠错能力和全面的性能监控。
+**重大更新**：项目现已从串行处理架构升级为三线程并行流水线架构，显著提升了实时TTS合成的性能和吞吐量。
 
 ## 项目结构
 
@@ -75,12 +76,13 @@ F[实时TTS<br/>qwen3stream.py]
 G[批量TTS<br/>ttstest.py]
 H[ZMQ集成<br/>qwen-to-data4.py]
 I[多后端TTS<br/>qwen-to-data7.py]
+J[三线程并行<br/>gen/tts/play]
 end
 subgraph "配置层"
-J[TTS音色目录<br/>tts_voices_catalog.json]
-K[提示词配置<br/>qwen-to-date-prompts.json]
-L[JSON Schema<br/>jsonschema.json]
-M[事件批处理<br/>qwen-to-data6.py]
+K[TTS音色目录<br/>tts_voices_catalog.json]
+L[提示词配置<br/>qwen-to-date-prompts.json]
+M[JSON Schema<br/>jsonschema.json]
+N[事件批处理<br/>qwen-to-data6.py]
 end
 A --> B
 A --> C
@@ -90,20 +92,21 @@ F --> A
 G --> A
 H --> A
 I --> A
-J --> A
-K --> H
+J --> I
+K --> A
 L --> H
 M --> H
+N --> H
 ```
 
 **图表来源**
 - [server.py:1-452](file://server.py#L1-L452)
 - [demo.html:1-685](file://demo.html#L1-L685)
 - [qwen3stream.py:1-196](file://qwen3stream.py#L1-L196)
-- [qwen-to-data7.py:1-1603](file://qwen-to-data7.py#L1-L1603)
+- [qwen-to-data7.py:1683-1696](file://qwen-to-data7.py#L1683-L1696)
 
 **章节来源**
-- [README.md:1-287](file://README.md#L1-L287)
+- [README.md:1-347](file://README.md#L1-L347)
 - [server.py:67-68](file://server.py#L67-L68)
 
 ## 核心组件
@@ -118,7 +121,32 @@ M --> H
 - **TTS服务**：`POST /tts` - 语音合成服务
 - **音色查询**：`GET /tts/voices` - 音色列表查询
 
-### 2. 多后端TTS实现
+### 2. 三线程并行流水线架构
+
+**重大更新**：系统现已实现三线程并行流水线架构，显著提升性能：
+
+```mermaid
+sequenceDiagram
+participant Gen as 生成线程(gen_worker)
+participant TTS as 合成线程(tts_worker)
+participant Play as 播放线程(_playback_worker)
+participant Queue as 队列管理
+Gen->>Queue : 生成任务(批次索引, 文本, 音色, 指令)
+Queue->>TTS : 分发合成任务
+TTS->>TTS : 合成音频数据
+TTS->>Queue : 音频数组 + 持续时间 + 批次索引
+Queue->>Play : 播放任务
+Play->>Play : 管道直传播放
+Play-->>Queue : 任务完成确认
+Queue-->>Gen : 下一批次处理
+```
+
+**线程职责分配**：
+- **gen_worker（生成线程）**：负责事件批处理和文本生成
+- **tts_worker（合成线程）**：负责音频合成和队列管理
+- **_playback_worker（播放线程）**：负责音频播放和管道传输
+
+### 3. 多后端TTS实现
 
 项目实现了三种TTS后端模式：
 
@@ -126,7 +154,7 @@ M --> H
 - **DashScope HTTP模式**：非实时合成，整段返回音频URL
 - **Kokoro本地TTS**：本地服务接口，支持自定义音色和语速
 
-### 3. 智能回退机制
+### 4. 智能回退机制
 
 系统具备智能的TTS后端选择能力：
 
@@ -134,19 +162,19 @@ M --> H
 - **回退策略**：sounddevice → kokoserver → dashscope
 - **手动指定**：支持命令行参数强制指定后端
 
-### 4. 事件批处理系统
+### 5. 事件批处理系统
 
 - **ZMQ实时订阅**：支持实时事件流处理
 - **批量处理**：按配置大小批量处理事件
 - **终局批次**：支持未满批次的特殊处理
 
-### 5. 自动文本修订
+### 6. 自动文本修订
 
 - **政策违规检测**：自动检测禁用词汇和正则表达式
 - **自动重写**：使用专用提示词自动重写违规内容
 - **质量保证**：重写后再次检测确保合规
 
-### 6. 性能监控系统
+### 7. 性能监控系统
 
 **新增** 增强的性能监控能力，包括：
 
@@ -154,11 +182,12 @@ M --> H
 - **HTTP往返时间跟踪**：监控DashScope API的HTTP往返时间
 - **音频延迟监控**：跟踪首次音频延迟和会话ID
 - **错误统计**：记录和报告各种类型的错误
+- **队列深度监控**：实时监控播放队列积压情况
 
 **章节来源**
 - [server.py:124-197](file://server.py#L124-L197)
 - [qwen3stream.py:21-81](file://qwen3stream.py#L21-L81)
-- [qwen-to-data7.py:1227-1288](file://qwen-to-data7.py#L1227-L1288)
+- [qwen-to-data7.py:1561-1643](file://qwen-to-data7.py#L1561-L1643)
 
 ## 架构概览
 
@@ -171,6 +200,7 @@ participant TTS as TTS引擎
 participant Audio as 音频播放器
 participant Backend as 多后端调度
 participant Monitor as 性能监控
+participant Threads as 三线程流水线
 Client->>WebSocket : 建立WebSocket连接
 WebSocket->>Client : 发送ready状态
 Client->>WebSocket : 发送PCM音频数据
@@ -179,9 +209,10 @@ ASR-->>WebSocket : 返回识别结果
 WebSocket-->>Client : 发送partial文本
 Client->>Backend : 请求语音合成
 Backend->>Monitor : 启动性能计时
-Backend->>TTS : 选择最优后端
-TTS->>Audio : 生成音频流
-Audio-->>Client : 实时播放音频
+Backend->>Threads : 分发合成任务
+Threads->>TTS : 生成音频流
+TTS-->>Threads : 音频数据
+Threads-->>Audio : 实时播放音频
 TTS-->>Monitor : 记录性能指标
 Monitor-->>Client : 发送性能报告
 ```
@@ -189,9 +220,55 @@ Monitor-->>Client : 发送性能报告
 **图表来源**
 - [server.py:124-197](file://server.py#L124-L197)
 - [qwen3stream.py:109-156](file://qwen3stream.py#L109-L156)
-- [qwen-to-data7.py:1227-1288](file://qwen-to-data7.py#L1227-L1288)
+- [qwen-to-data7.py:1561-1643](file://qwen-to-data7.py#L1561-L1643)
 
 ## 详细组件分析
+
+### 三线程并行流水线架构
+
+#### 实现原理
+
+**重大更新**：系统现已实现三线程并行流水线架构，显著提升性能：
+
+```mermaid
+flowchart TD
+Start([开始事件处理]) --> GenThread[生成线程启动]
+GenThread --> TTSQueue[生成任务队列]
+TTSQueue --> TTSWorker[合成线程启动]
+TTSWorker --> PlayQueue[播放队列]
+PlayQueue --> PlayWorker[播放线程启动]
+PlayWorker --> Parallel[并行处理]
+Parallel --> Monitor[性能监控]
+Monitor --> Complete[处理完成]
+```
+
+**线程间协作机制**：
+- **队列管理**：使用`queue.Queue`实现线程间通信
+- **动态语速调节**：根据播放队列积压情况自动调整合成速度
+- **管道直传**：使用`soundfile`和`subprocess`实现音频管道直传
+
+#### 关键配置参数
+
+| 参数名称 | 默认值 | 说明 |
+|---------|--------|------|
+| ASR_WS_DECODE_INTERVAL_S | 1.2秒 | 解码间隔时间 |
+| ASR_WS_MAX_WINDOW_S | 12秒 | 最大音频窗口大小 |
+| sample_rate | 16000Hz | 采样率 |
+| channels | 1 | 单声道 |
+| KOKORO_SPEED | 1.0 | Kokoro默认语速 |
+| QWEN_REALTIME_TTS_WAIT | 20秒 | 实时TTS等待完成时间 |
+
+#### 队列管理策略
+
+**新增**：智能队列管理机制：
+
+- **生成队列**：存储待合成的文本批次
+- **播放队列**：存储已合成的音频数组
+- **动态调节**：根据播放队列深度自动调整合成速度
+- **内存优化**：使用numpy数组避免重复序列化
+
+**章节来源**
+- [qwen-to-data7.py:1548-1643](file://qwen-to-data7.py#L1548-L1643)
 
 ### WebSocket实时ASR组件
 
@@ -285,6 +362,7 @@ NarrationRealtimeTtsCallback <|-- MyCallback
 - **边收边播**：实时音频数据边接收边播放
 - **缓冲区管理**：使用线程安全的字节数组缓冲
 - **尾音处理**：智能的音频尾音处理和清理
+- **管道直传**：使用`soundfile`和`subprocess`实现管道直传
 
 #### 关键参数配置
 
@@ -302,6 +380,7 @@ NarrationRealtimeTtsCallback <|-- MyCallback
 - **实时计时**：使用`time.perf_counter()`进行高精度计时
 - **延迟跟踪**：监控首次音频延迟和会话ID
 - **错误统计**：记录和报告各种类型的错误
+- **队列深度监控**：实时监控播放队列积压情况
 
 **章节来源**
 - [qwen3stream.py:12-19](file://qwen3stream.py#L12-L19)
@@ -343,6 +422,7 @@ CheckKokoro2 --> |是| Kokoro2[后端: kokoro]
 | 实时WebSocket | ✅ 高 | 高 | 中等 | 低延迟实时播报 |
 | DashScope HTTP | ❌ 低 | 高 | 低 | 批量合成 |
 | Kokoro本地 | ❌ 低 | 高 | 中等 | 本地部署场景 |
+| 三线程并行 | ✅ 高 | 高 | 高 | 高吞吐量实时场景 |
 
 #### 实时TTS回调处理
 
@@ -368,6 +448,7 @@ Closed --> [*]
 - **合成时间统计**：记录TTS合成的总时间和服务端推理时间
 - **超时处理**：智能的超时检测和错误恢复
 - **性能指标**：详细的性能指标记录和报告
+- **队列深度监控**：实时监控播放队列积压情况
 
 #### 关键参数配置
 
@@ -450,6 +531,7 @@ Validate --> |失败| Error3[最终违规]
 - **LLM生成时间**：监控千问模型的生成时间
 - **重写处理时间**：跟踪文本修订的时间消耗
 - **实时TTS统计**：记录实时TTS的性能指标
+- **队列深度监控**：实时监控播放队列积压情况
 
 **章节来源**
 - [qwen-to-data7.py:89-91](file://qwen-to-data7.py#L89-L91)
@@ -558,42 +640,49 @@ D[ttstest.py]
 E[qwen-to-data4.py]
 F[qwen-to-data7.py]
 G[qwen-to-data6.py]
+H[test_kokoro.py]
 end
 subgraph "音频处理库"
-H[dashscope]
-I[sounddevice]
-J[pydub]
-K[soundfile]
-L[pyzmq]
+I[dashscope]
+J[sounddevice]
+K[pydub]
+L[soundfile]
+M[pyzmq]
+N[kokoro]
 end
 subgraph "AI模型"
-M[Qwen3-ASR]
-N[Qwen3-TTS]
-O[Qwen Flash]
-P[Kokoro TTS]
+O[Qwen3-ASR]
+P[Qwen3-TTS]
+Q[Qwen Flash]
+R[Kokoro TTS]
 end
 subgraph "基础库"
-Q[FastAPI]
-R[Pydantic]
-S[NumPy]
-T[PyTorch]
-U[Python-dotenv]
+S[FastAPI]
+T[Pydantic]
+U[NumPy]
+V[PyTorch]
+W[Python-dotenv]
+X[threading]
+Y[queue]
 end
-A --> H
-A --> M
-F --> H
+A --> I
+A --> O
 F --> I
+F --> J
 F --> L
-G --> H
+F --> N
 G --> I
-B --> H
+G --> J
 B --> I
-A --> Q
-A --> R
-F --> S
-F --> U
-G --> S
+B --> J
+A --> S
 A --> T
+F --> U
+F --> W
+G --> U
+A --> V
+F --> X
+F --> Y
 ```
 
 **图表来源**
@@ -612,6 +701,10 @@ A --> T
 | pydub | 最新版本 | 音频格式转换 |
 | python-dotenv | 最新版本 | 环境变量管理 |
 | pyzmq | 最新版本 | ZMQ事件订阅 |
+| kokoro | 最新版本 | 本地TTS引擎 |
+| numpy | 最新版本 | 数值计算支持 |
+| threading | Python标准库 | 多线程支持 |
+| queue | Python标准库 | 线程间通信 |
 
 **章节来源**
 - [requirements.txt:1-13](file://requirements.txt#L1-L13)
@@ -621,31 +714,41 @@ A --> T
 
 ### 实时性能优化策略
 
-#### 1. 缓冲区管理优化
+#### 1. 三线程并行优化
+
+**重大更新**：三线程并行架构显著提升性能：
+
+- **流水线处理**：生成、合成、播放三阶段并行执行
+- **队列管理**：使用`queue.Queue`实现高效的任务分发
+- **动态语速调节**：根据播放队列深度自动调整合成速度
+- **内存优化**：使用numpy数组避免重复序列化
+
+#### 2. 缓冲区管理优化
 
 - **动态缓冲区大小**：根据音频长度动态调整缓冲区大小
 - **内存池管理**：使用临时文件避免内存溢出
 - **异步处理**：使用异步I/O提高处理效率
 
-#### 2. 采样率优化
+#### 3. 采样率优化
 
 - **多采样率支持**：支持16kHz和24kHz两种采样率
 - **智能转换**：根据需求自动进行采样率转换
 - **质量保持**：确保音频质量不受影响
 
-#### 3. 网络传输优化
+#### 4. 网络传输优化
 
 - **WebSocket优化**：使用二进制帧传输音频数据
 - **压缩算法**：减少网络带宽占用
 - **错误恢复**：实现网络异常的自动恢复机制
 
-#### 4. 多后端性能优化
+#### 5. 多后端性能优化
 
 - **实时后端优先**：优先使用实时WebSocket减少延迟
 - **HTTP后端缓存**：对常用文本进行缓存
 - **本地后端优化**：优化本地服务的响应时间
+- **三线程并行**：显著提升Kokoro后端吞吐量
 
-#### 5. 性能监控优化
+#### 6. 性能监控优化
 
 **新增** 增强的性能监控策略：
 
@@ -653,6 +756,7 @@ A --> T
 - **HTTP往返时间**：监控网络延迟和API响应时间
 - **实时性能指标**：跟踪音频延迟和会话状态
 - **错误统计分析**：记录和分析各种错误类型
+- **队列深度监控**：实时监控播放队列积压情况
 
 ### 性能调优参数
 
@@ -664,6 +768,8 @@ A --> T
 | blocksize | 实时性 | 1024-4096字节 |
 | QWEN_REALTIME_TTS_WAIT | 实时性 | 10-30秒 |
 | QWEN_EVENTS_BATCH | 吞吐量 | 5-20条 |
+| KOKORO_SPEED | 合成速度 | 0.5-2.0倍 |
+| 队列深度阈值 | 队列管理 | 1-3个批次 |
 
 ### 内存和CPU优化
 
@@ -672,6 +778,7 @@ A --> T
 - **资源监控**：实时监控系统资源使用情况
 - **后端选择优化**：根据硬件条件选择最优后端
 - **性能指标监控**：持续监控关键性能指标
+- **线程池管理**：合理配置线程数量和优先级
 
 ## 故障排除指南
 
@@ -696,6 +803,7 @@ A --> T
 - 验证音频格式兼容性
 - 调整缓冲区大小
 - 监控音频延迟指标
+- 检查播放队列状态
 
 #### 3. TTS合成问题
 
@@ -707,6 +815,7 @@ A --> T
 - 调整音色参数
 - 检查后端可用性
 - 分析HTTP往返时间
+- 监控队列深度
 
 #### 4. 多后端选择问题
 
@@ -718,7 +827,18 @@ A --> T
 - 使用--tts-backend手动指定
 - 查看后端选择日志
 
-#### 5. 性能监控问题
+#### 5. 三线程并行问题
+
+**问题现象**：线程阻塞或性能下降
+
+**解决方案**：
+- 检查队列状态和深度
+- 验证线程同步机制
+- 监控CPU使用率
+- 调整线程优先级
+- 分析性能瓶颈
+
+#### 6. 性能监控问题
 
 **问题现象**：性能指标不准确或缺失
 
@@ -727,6 +847,7 @@ A --> T
 - 验证性能监控代码
 - 查看错误日志
 - 调整监控频率
+- 监控队列深度变化
 
 ### 调试技巧
 
@@ -737,6 +858,7 @@ A --> T
 - **WebSocket日志**：监控WebSocket连接状态
 - **后端日志**：监控各后端的性能指标
 - **性能监控日志**：分析性能计时和错误统计
+- **线程状态日志**：监控三线程的运行状态
 
 #### 2. 性能监控
 
@@ -745,6 +867,7 @@ A --> T
 - **网络延迟**：测量网络延迟，优化传输策略
 - **TTS延迟**：测量从事件到音频播放的端到端延迟
 - **HTTP往返时间**：跟踪API调用的响应时间
+- **队列深度**：监控播放队列积压情况
 
 #### 3. 音频质量测试
 
@@ -753,6 +876,7 @@ A --> T
 - **并发测试**：测试多用户并发场景
 - **回退测试**：测试不同后端的切换
 - **性能回归测试**：验证性能改进效果
+- **三线程性能测试**：验证并行处理效果
 
 #### 4. 错误处理调试
 
@@ -760,6 +884,7 @@ A --> T
 - **错误统计**：分析错误类型和发生频率
 - **日志分析**：查看详细的错误堆栈信息
 - **性能影响**：评估错误处理对整体性能的影响
+- **线程死锁检测**：检查三线程间的同步问题
 
 **章节来源**
 - [README.md:194-204](file://README.md#L194-L204)
@@ -769,15 +894,19 @@ A --> T
 本项目提供了一个完整的实时语音识别和语音合成解决方案，具有以下特点：
 
 1. **高性能实时处理**：通过WebSocket实现低延迟的音频流处理
-2. **多格式支持**：支持多种音频格式和音色选择
-3. **智能多后端支持**：自动检测并选择最优TTS后端
-4. **灵活的架构设计**：模块化设计便于扩展和维护
-5. **完善的前端集成**：提供完整的Web界面和Vue3组件
-6. **自动文本修订**：具备政策违规自动检测和重写能力
-7. **事件批处理**：高效处理实时事件流
-8. **全面的性能监控**：详细的性能计时测量和HTTP往返时间跟踪
-9. **强大的错误处理**：完善的错误恢复机制和超时处理
-10. **实时性能优化**：智能的性能调优和资源管理
+2. **三线程并行架构**：显著提升Kokoro后端的吞吐量和响应性能
+3. **多格式支持**：支持多种音频格式和音色选择
+4. **智能多后端支持**：自动检测并选择最优TTS后端
+5. **灵活的架构设计**：模块化设计便于扩展和维护
+6. **完善的前端集成**：提供完整的Web界面和Vue3组件
+7. **自动文本修订**：具备政策违规自动检测和重写能力
+8. **事件批处理**：高效处理实时事件流
+9. **全面的性能监控**：详细的性能计时测量和HTTP往返时间跟踪
+10. **强大的错误处理**：完善的错误恢复机制和超时处理
+11. **实时性能优化**：智能的性能调优和资源管理
+12. **动态语速调节**：根据队列深度自动调整合成速度
+
+**重大更新**：三线程并行流水线架构的引入，使得系统能够同时处理多个批次的音频合成和播放任务，显著提升了整体吞吐量和响应性能。这种架构特别适用于高并发的实时语音应用场景，能够有效避免传统串行处理中的性能瓶颈。
 
 项目的核心优势在于其实时性和高质量的音频处理能力，以及智能的多后端支持、自动纠错机制、全面的性能监控和强大的错误处理能力，适用于各种实时语音应用场景。通过合理的性能调优和错误处理机制，可以满足生产环境的严格要求。
 
@@ -878,6 +1007,10 @@ KOKORO_SPEED=1.0
 # 性能监控配置
 PERFORMANCE_MONITORING=true
 MONITOR_INTERVAL=1.0
+
+# 线程配置
+THREAD_POOL_SIZE=4
+QUEUE_DEPTH_THRESHOLD=3
 ```
 
 #### 2. 音色配置
@@ -958,6 +1091,8 @@ MONITOR_INTERVAL=1.0
 | tts_http_time | float | HTTP往返时间（秒） | < 5s |
 | llm_generation_time | float | LLM生成时间（秒） | < 30s |
 | batch_processing_time | float | 批处理时间（秒） | < 60s |
+| queue_depth | int | 播放队列深度 | < 5个批次 |
+| synthesis_speed | float | 合成速度倍率 | 0.5-2.0倍 |
 
 #### 2. 错误类型
 
@@ -968,3 +1103,19 @@ MONITOR_INTERVAL=1.0
 | APIResponseError | API响应错误 | 重试请求，检查API密钥 |
 | MemoryExhaustion | 内存耗尽 | 清理缓存，释放资源 |
 | NetworkFailure | 网络故障 | 检查网络连接，重试请求 |
+| ThreadDeadlock | 线程死锁 | 重启相关线程，检查同步机制 |
+| QueueOverflow | 队列溢出 | 调整队列大小，优化处理速度 |
+| PerformanceDegradation | 性能下降 | 监控CPU使用率，优化算法 |
+
+#### 3. 三线程监控指标
+
+| 指标名称 | 数据类型 | 描述 | 监控方法 |
+|----------|----------|------|----------|
+| gen_worker_active | bool | 生成线程活跃状态 | 线程状态检查 |
+| tts_worker_active | bool | 合成线程活跃状态 | 线程状态检查 |
+| playback_worker_active | bool | 播放线程活跃状态 | 线程状态检查 |
+| tts_queue_size | int | 合成队列大小 | 队列长度监控 |
+| play_queue_size | int | 播放队列大小 | 队列长度监控 |
+| queue_depth_level | enum | 队列深度等级 | 队列深度监控 |
+| thread_utilization | float | 线程利用率 | CPU使用率监控 |
+| throughput_bps | float | 吞吐量（字节/秒） | 性能计时统计 |
