@@ -56,6 +56,12 @@ def main() -> None:
                 if i < len(lines) - 1 or not args.once:
                     time.sleep(args.interval)
             if args.once:
+                print("所有消息已发送完毕，服务保持运行（Ctrl+C 退出）…")
+                try:
+                    while True:
+                        time.sleep(1)
+                except KeyboardInterrupt:
+                    pass
                 break
     except KeyboardInterrupt:
         print("已停止")
