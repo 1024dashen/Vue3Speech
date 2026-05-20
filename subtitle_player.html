@@ -57,6 +57,14 @@
     .topbar button:hover { background: rgba(255,255,255,0.06); }
     .topbar .status { font-size: 0.78rem; color: var(--muted); }
     .topbar .audio-st { font-size: 0.78rem; color: var(--ok); }
+    .btn-export {
+      padding: 3px 12px; border-radius: 4px;
+      border: 1px solid var(--ok); background: rgba(63,185,80,0.12);
+      color: var(--ok); cursor: pointer; font-size: 0.8rem; font-weight: 600;
+    }
+    .btn-export:hover { background: rgba(63,185,80,0.25); }
+    .btn-export:disabled { opacity: 0.4; cursor: not-allowed; }
+    .export-status { font-size: 0.78rem; color: var(--warn); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     /* 三栏主体 */
     .main {
@@ -219,6 +227,8 @@
   <button id="btnConnect" onclick="connectWS()">连接</button>
   <button id="btnDisconnect" onclick="disconnectWS()" disabled>断开</button>
   <span class="audio-st" id="audioStatus"></span>
+  <button class="btn-export" id="btnExport" onclick="exportVideo()">⬇ 导出视频</button>
+  <span class="export-status" id="exportStatus"></span>
 </div>
 
 <!-- 三栏主体 -->
@@ -236,7 +246,7 @@
   <!-- 中栏：视频 + 字幕 -->
   <div class="panel-center">
     <div class="video-wrap">
-      <video id="video" src="/static/test.mp4" controls muted></video>
+      <video id="video" src="http://devusage.oss-cn-shanghai.aliyuncs.com/yangfan/c271dc16d7d0164cad4c0912caae8add_raw.mp4" controls muted></video>
       <div class="subtitle-overlay">
         <span id="subtitleText" class="subtitle-text hidden"></span>
       </div>
@@ -267,6 +277,40 @@
   let ws = null;
   let subtitleTimer = null;
   let totalEvents = 0;
+  let videoStarted = false;  // 是否已由首条消息触发播放
+
+  const btnExport = document.getElementById('btnExport');
+  const exportStatus = document.getElementById('exportStatus');
+
+  // ---- 导出视频 ----
+  async function exportVideo() {
+    btnExport.disabled = true;
+    exportStatus.textContent = '正在合成视频，请稍候…';
+    exportStatus.style.color = 'var(--warn)';
+    // API 与页面同源（同一个 HTTP 服务）
+    const apiBase = location.origin;
+    try {
+      const resp = await fetch(`${apiBase}/api/export`, { method: 'POST' });
+      const data = await resp.json();
+      if (!resp.ok || data.error) {
+        exportStatus.textContent = '失败：' + (data.error || resp.statusText);
+        exportStatus.style.color = 'var(--red)';
+        return;
+      }
+      // 自动下载
+      const a = document.createElement('a');
+      a.href = `${apiBase}${data.url}`;
+      a.download = data.filename || 'export.mp4';
+      a.click();
+      exportStatus.textContent = '导出完成：' + (data.filename || 'export.mp4');
+      exportStatus.style.color = 'var(--ok)';
+    } catch (e) {
+      exportStatus.textContent = '错误：' + e.message;
+      exportStatus.style.color = 'var(--red)';
+    } finally {
+      btnExport.disabled = false;
+    }
+  }
 
   function setStatus(connected) {
     statusDot.className = 'dot ' + (connected ? 'ok' : 'err');
@@ -371,8 +415,8 @@
 
     ws.onopen = () => {
       setStatus(true);
-      addLog('SYS', 'WebSocket 已连接');
-      if (video.paused) video.play().catch(() => {});
+      addLog('SYS', 'WebSocket 已连接，等待赛事事件…');
+      // 不自动播放视频，等收到第一条事件消息再定位播放
     };
 
     ws.onmessage = (event) => {
@@ -381,6 +425,25 @@
         switch (data.type) {
           case 'events':
             addEvents(data);
+            // 首条事件消息：定位视频到 time_seconds 并开始播放
+            if (!videoStarted && data.events && data.events.length > 0) {
+              videoStarted = true;
+              const firstTs = data.events[0].time_seconds;
+              const startSec = parseFloat(firstTs);
+              if (!isNaN(startSec) && startSec > 0) {
+                // 等 seek 完成后再播放，否则 play() 会被浏览器忽略
+                video.addEventListener('seeked', function onSeeked() {
+                  video.removeEventListener('seeked', onSeeked);
+                  video.play().catch(() => {});
+                  addLog('SYS', `视频从 ${startSec.toFixed(1)}s 开始播放`);
+                });
+                video.currentTime = startSec;
+                addLog('SYS', `视频定位到 ${startSec.toFixed(1)}s…`);
+              } else {
+                video.play().catch(() => {});
+                addLog('SYS', '视频开始播放');
+              }
+            }
             break;
           case 'narration':
             addNarration(data.batch_index, data.text);
@@ -415,7 +478,11 @@
     setTimeout(connectWS, 500);
   })();
 
-  video.addEventListener('canplay', () => video.play().catch(() => {}));
+  // 视频加载后不自动播放，等待首条 WS 事件消息触发
+  video.addEventListener('canplay', () => {
+    // 仅在首条消息到来前暂停，之后不再干预（避免 seek 后 canplay 重新触发导致 pause 覆盖 play）
+    if (!videoStarted) video.pause();
+  });
 </script>
 
 </body>
