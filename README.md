@@ -255,8 +255,9 @@ python qwen-to-data7.py -b 3 --tts-backend kokoro --kokoro-voice zm_yunxia --zmq
 python qwen-to-data7.py --input zmq_events.jsonl
 
 
-python zmqserver.py
+python zmqserver.py 
 
+python zmqserver.py --input zmq_events.jsonl --once 
 
 python qwen-to-data7.py -b 3 --tts-backend kokoro --kokoro-voice zm_yunxia --zmq-endpoint tcp://127.0.0.1:5557
 
