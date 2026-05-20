@@ -27,11 +27,14 @@
 
 ## 更新摘要
 **变更内容**
-- 新增WebSocket日志功能，支持实时日志广播和可视化
-- 增强事件广播能力，支持多类型事件的实时传输
-- 集成详细的TTS合成日志，提供完整的性能监控
+- 增强了政策违规检测和自动修订功能，包括自动重写机制和违规检测系统
+- 改进了事件批处理系统，支持更复杂的多团队运动场景
+- 新增了WebSocket日志系统，提供实时日志广播和可视化监控
+- 增强了事件广播能力，支持多类型事件的实时传输
+- 集成了详细的TTS合成日志，提供完整的性能监控
 - 新增字幕WebSocket服务和HTTP静态文件服务
 - 改进的音频队列管理和浏览器播放协调机制
+- 优化了双线程并行流水线架构，提升系统吞吐量和响应性能
 
 ## 目录
 1. [简介](#简介)
@@ -62,7 +65,7 @@
 - **增强事件广播**：多类型事件的实时传输和处理
 - **浏览器音频播放**：通过WebSocket实现远程音频播放协调
 
-**重要更新**：项目新增了完整的WebSocket日志系统，包括实时日志广播、事件类型支持、音频队列深度监控等功能，为实时TTS系统提供了强大的可视化监控能力。
+**重要更新**：项目新增了完整的WebSocket日志系统，包括实时日志广播、事件类型支持、音频队列深度监控等功能，为实时TTS系统提供了强大的可视化监控能力。同时，增强了政策违规检测和自动修订功能，改进了事件批处理系统，支持更复杂的多团队运动场景。
 
 ## 项目结构
 
@@ -187,7 +190,6 @@ E1 --> Broadcast
 Broadcast --> Clients[所有客户端]
 Clients --> Process[事件处理]
 Process --> Display[实时显示]
-end
 ```
 
 **事件处理机制**：
@@ -293,9 +295,15 @@ end
 
 ### 9. 自动文本修订
 
+**新增功能**：增强的政策违规检测和自动修订功能：
+
 - **政策违规检测**：自动检测禁用词汇和正则表达式
 - **自动重写**：使用专用提示词自动重写违规内容
 - **质量保证**：重写后再次检测确保合规
+- **违规类型识别**：支持多种违规类型的自动识别和处理
+
+**章节来源**
+- [qwen-to-data7.py:246-272](file://qwen-to-data7.py#L246-L272)
 
 ### 10. 性能监控系统
 
@@ -865,6 +873,8 @@ GenerateNarration --> [*]
 
 #### 自动文本修订机制
 
+**新增功能**：增强的政策违规检测和自动修订系统：
+
 ```mermaid
 flowchart TD
 Start([生成文本]) --> CheckViolations{检查政策违规?}
@@ -1346,6 +1356,18 @@ ZZZ[zoneinfo]
 - 监控队列深度变化
 - 检查WebSocket日志
 
+#### 10. 自动文本修订问题
+
+**问题现象**：政策违规检测失效或重写失败
+
+**解决方案**：
+- 检查提示词配置
+- 验证违规检测规则
+- 监控重写模型性能
+- 查看修订系统日志
+- 分析违规类型识别准确性
+- 检查WebSocket日志
+
 ### 调试技巧
 
 #### 1. 日志分析
@@ -1413,7 +1435,7 @@ ZZZ[zoneinfo]
 
 **重要更新**：双线程并行流水线架构的引入，使得系统能够同时处理多个批次的音频合成任务，显著提升了整体吞吐量和响应性能。虽然原本计划的三线程架构（gen/tts/play）已被移除，但当前的双线程架构仍然能够有效处理实时语音应用场景，适用于生产环境的严格要求。
 
-**新增功能**：增强事件批处理系统现已支持复杂的多团队运动场景，包括动作事件（raise_hand、squat、raise_hand+squat组合）和得分事件的智能识别和处理，为体育赛事解说提供了更丰富的事件支持。WebSocket日志系统的引入为实时TTS系统提供了强大的可视化监控能力，包括实时日志广播、事件类型支持、音频队列深度监控等功能。
+**新增功能**：增强事件批处理系统现已支持复杂的多团队运动场景，包括动作事件（raise_hand、squat、raise_hand+squat组合）和得分事件的智能识别和处理，为体育赛事解说提供了更丰富的事件支持。WebSocket日志系统的引入为实时TTS系统提供了强大的可视化监控能力，包括实时日志广播、事件类型支持、音频队列深度监控等功能。自动文本修订功能的增强进一步提升了系统的合规性和自动化水平。
 
 项目的核心优势在于其实时性和高质量的音频处理能力，以及智能的多后端支持、自动纠错机制、全面的性能监控、强大的错误处理能力、WebSocket日志系统和增强事件广播功能，适用于各种实时语音应用场景。通过合理的性能调优和错误处理机制，可以满足生产环境的严格要求。
 
@@ -1578,7 +1600,7 @@ AUTO_OPEN_BROWSER=true
     "system": "你是 HADO AR 竞技比赛的中文解说员。【输入】用户 JSON 含：说明、fragment_meta、fragment_stats（程序预统计的 action/score 条数与 narration_focus）、json_schema、events、forbidden_substrings、forbidden_regexes、final_only_substrings。务必先读 fragment_meta 与 fragment_stats.narration_focus。【事件含义】event_type 为 action 或 score。抬手=发射能量球攻击；下蹲=躲避防御；抬手+下蹲=防御反击。score 表示得分方得一分，可含 KO 信息。【选材与侧重——必须有\"攻防画面\"】- 先数本批 events 里 event_type 为 action 与 score 的条数（可与 fragment_stats 对照）。- 若本批没有 score，或 action 条数大于等于 score 条数：narration 必须以攻防为主，要激情高昂的解说词，活跃解说氛围。- 若本批有 score 且 score 明显是片段焦点（score 多于 action）：可以写得分解说，避免只报比分感。【输出】只返回一个 JSON 对象：{\"narration\":\"...\"}，不要 Markdown、不要其它键。【narration 硬性规则】1) 长度不超过 50 个字符（汉字/字母/数字/标点各算 1）。2) 不要特殊符号（不要用 * # 【】等）。3) narration 不得包含 forbidden_substrings 任一子串。4) narration 不得被 forbidden_regexes 中任一正则匹配（模型侧按字面理解这些模式，避免同义套话）。5) 仅当 is_final_batch 为 true 时，才允许出现 final_only_substrings 中的子串；否则禁止。6) 得分解说避免复读模板：不要用「又得一城」「连下N城」「击倒/倒下」类说法；换用「蓝方得分」「红方扳回一分」「双方僵持」等不重复、具体的短句。7) 若本批以普通攻防为主、无 score，不要写成连续得分或 KO 口吻。8) narration 中禁止写入视频时间码（禁止与 events 里 time 字段同形的 mm:ss.mmm，如 00:30.083）；不要「时间码+逗号+解说」式拼接，解说只写现场短句。",
     "user_note": "以下为 HADO 视频识别事件片段（按文件顺序），请据此生成一条解说。请先粗数本批 action 与 score 条数：动作为主时必须写防御或进攻类现场短句，不要只写得分解说。请同时遵守 fragment_meta、forbidden_substrings、forbidden_regexes、final_only_substrings。",
     "forbidden_substrings": ["再下一城","下一城","再进一分","又得一城","连下","倒下","倒地","倒地不起","轰然倒下","击倒","被击倒","击倒在地","锁定优势"],
-    "forbidden_regexes": ["连下[一二三四五六七八九十百千万两]+城","连得[一二三四五六七八九十百千万两]+分","连下[0-9]+城","连得[0-9]+分","\\d{2}:\\d{2}\\.\\d{3}"],
+    "forbidden_regexes": ["连下[一二三四五六七八九十百千万两]+城","连得[一二三四五六七八九十百千万两]+分","\\d{2}:\\d{2}\\.\\d{3}"],
     "final_only_substrings": ["制胜一击"],
     "revision_system": "你是 HADO AR 竞技比赛实况解说员。请严格按用户 JSON 里的 violations 重写一条 narration。输出仍为单个 JSON：{\"narration\":\"...\"}，无其它键。重写时禁止把 events 中的 time（mm:ss.mmm）写进 narration，禁止时间码+逗号+正文；长度与禁用词规则与用户消息中的说明一致。"
 }
@@ -1662,6 +1684,8 @@ AUTO_OPEN_BROWSER=true
 | ZMQConnectionError | ZMQ连接错误 | 重试连接，检查ZMQ服务 |
 | WebSocketLogError | WebSocket日志错误 | 检查日志广播，重新建立连接 |
 | AudioQueueDepthError | 音频队列深度错误 | 检查队列管理，重置深度计数 |
+| PolicyViolationError | 政策违规错误 | 启动自动重写机制，检查违规类型 |
+| RevisionFailedError | 重写失败错误 | 记录重写错误，回退到原始文本 |
 
 #### 3. 双线程监控指标
 
@@ -1678,3 +1702,5 @@ AUTO_OPEN_BROWSER=true
 | event_processing_rate | float | 事件处理速率（事件/秒） | 事件统计监控 |
 | ws_log_broadcast_rate | float | WebSocket日志广播速率（条/秒） | 日志统计监控 |
 | audio_queue_depth_avg | float | 音频队列深度平均值 | 队列统计监控 |
+| policy_violation_rate | float | 政策违规检测率 | 违规统计监控 |
+| revision_success_rate | float | 自动重写成功率 | 重写统计监控 |
