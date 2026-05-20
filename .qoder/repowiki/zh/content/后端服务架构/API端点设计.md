@@ -5,6 +5,8 @@
 - [server.py](file://server.py)
 - [edge_subtitle_voiceover.py](file://edge_subtitle_voiceover.py)
 - [qwen3stream.py](file://qwen3stream.py)
+- [qwen-to-data8.py](file://qwen-to-data8.py)
+- [subtitle_player.html](file://subtitle_player.html)
 - [README.md](file://README.md)
 - [demo.html](file://demo.html)
 - [tts_voices_catalog.json](file://tts_voices_catalog.json)
@@ -13,7 +15,7 @@
 - [ttstest.py](file://ttstest.py)
 - [qwen-to-data7.py](file://qwen-to-data7.py)
 - [kokoserver.py](file://kokoserver.py)
-- [test_kokoro.py](file://test_kokoro.py)
+- [_test_export.py](file://_test_export.py)
 </cite>
 
 ## 目录
@@ -34,11 +36,12 @@
 - WebSocket端点：连接协议、消息格式与状态管理
 - 语音合成端点：DashScope、Edge TTS与Kokoro TTS的集成方式
 - 字幕配音端点：时间轴处理、变速算法与输出格式
-- **新增** Kokoro TTS端点：同步与流式语音合成
+- **新增** 导出视频端点：音频片段与字幕合成视频
+- **新增** WebSocket字幕服务：实时字幕、事件和日志广播
 - 请求示例、响应格式与错误代码说明
 
 ## 项目结构
-项目采用FastAPI作为后端框架，结合Qwen ASR模型与DashScope、Kokoro TTS能力，提供Web演示页面与多种API端点。
+项目采用FastAPI作为后端框架，结合Qwen ASR模型与DashScope、Kokoro TTS能力，提供Web演示页面与多种API端点。**新增**的qwen-to-data8.py模块提供了完整的字幕WebSocket服务和视频导出功能。
 
 ```mermaid
 graph TB
@@ -47,9 +50,11 @@ S["FastAPI 应用<br/>server.py"]
 E["边缘字幕配音工具<br/>edge_subtitle_voiceover.py"]
 Q["实时TTS流示例<br/>qwen3stream.py"]
 K["Kokoro TTS服务<br/>kokoserver.py"]
+D8["字幕WebSocket服务<br/>qwen-to-data8.py"]
 end
 subgraph "前端演示"
 D["演示页面<br/>demo.html"]
+SP["字幕播放器<br/>subtitle_player.html"]
 end
 subgraph "外部服务"
 DS["DashScope TTS"]
@@ -61,8 +66,10 @@ subgraph "资源文件"
 TV["音色目录<br/>tts_voices_catalog.json"]
 SB["字幕样例<br/>subtitles.json"]
 REQ["依赖清单<br/>requirements.txt"]
+TE["测试导出脚本<br/>_test_export.py"]
 end
 D --> |"HTTP/WS"| S
+SP --> |"WebSocket字幕"| D8
 S --> |"ASR推理"| HF
 S --> |"DashScope TTS"| DS
 S --> |"Edge TTS 列表/合成"| ET
@@ -72,6 +79,7 @@ S --> TV
 S --> SB
 S --> REQ
 K --> KK
+D8 --> TE
 ```
 
 **图表来源**
@@ -80,6 +88,8 @@ K --> KK
 - [qwen3stream.py:1-196](file://qwen3stream.py#L1-L196)
 - [demo.html:1-685](file://demo.html#L1-L685)
 - [kokoserver.py:1-240](file://kokoserver.py#L1-L240)
+- [qwen-to-data8.py:1-2326](file://qwen-to-data8.py#L1-L2326)
+- [_test_export.py:1-57](file://_test_export.py#L1-L57)
 
 **章节来源**
 - [README.md:1-287](file://README.md#L1-L287)
@@ -90,15 +100,19 @@ K --> KK
 - Qwen ASR模型：本地或Hub加载，支持批量音频识别与WebSocket实时识别
 - DashScope TTS：HTTP接口与实时WebSocket接口，支持多种音色与指令
 - Edge TTS：音色查询与字幕配音生成，支持变速与静音对齐
-- **新增** Kokoro TTS：本地化中文语音合成，支持同步与流式TTS
+- **新增** 导出视频服务：qwen-to-data8.py提供HTTP API与WebSocket字幕服务
+- **新增** WebSocket字幕服务：实时广播字幕、事件和日志消息
+- **新增** 视频导出功能：将音频片段和字幕合成MP4视频
 - 演示页面：浏览器端录音、实时识别与TTS播放
 
 **章节来源**
 - [server.py:67-95](file://server.py#L67-L95)
 - [README.md:100-193](file://README.md#L100-L193)
+- [qwen-to-data8.py:284-401](file://qwen-to-data8.py#L284-L401)
 
 ## 架构总览
-后端服务通过FastAPI暴露多个端点：
+后端服务通过FastAPI暴露多个端点，**新增**了完整的字幕WebSocket服务和视频导出功能：
+
 - GET /：健康检查
 - GET /demo：返回演示页面
 - POST /transcribe：批量音频识别
@@ -111,11 +125,16 @@ K --> KK
 - GET /tts/edge-voiceover-files/{file_id}：获取缓存的MP3文件
 - **新增** POST /tts/kokoro：Kokoro TTS同步合成
 - **新增** POST /tts/kokoro/stream：Kokoro TTS流式合成
+- **新增** POST /api/inject_test：注入测试记录（用于视频导出）
+- **新增** POST /api/export：导出视频（合成MP4）
+- **新增** WebSocket /ws/subtitles：字幕、事件、日志实时广播
 
 ```mermaid
 sequenceDiagram
 participant Client as "客户端"
 participant API as "FastAPI 应用"
+participant Export as "导出服务"
+participant WS as "WebSocket字幕服务"
 participant ASR as "Qwen ASR 模型"
 participant TTS as "DashScope TTS"
 participant Edge as "Edge TTS"
@@ -159,6 +178,14 @@ API-->>Client : {path, url, file_id}
 Client->>API : GET /tts/edge-voiceover-files/{file_id}
 API->>FS : FileResponse(mp3)
 FS-->>Client : MP3 文件
+Client->>Export : POST /api/inject_test (JSON)
+Export->>Export : 注入测试记录
+Export-->>Client : {ok : true, count : N}
+Client->>Export : POST /api/export
+Export->>Export : _do_export() 合成视频
+Export-->>Client : {url : "/exports/export_YYYYMMDD_HHMMSS.mp4", filename : "export_YYYYMMDD_HHMMSS.mp4"}
+Client->>WS : WebSocket /ws/subtitles
+WS-->>Client : events/narration/subtitle/log 消息
 ```
 
 **图表来源**
@@ -167,6 +194,8 @@ FS-->>Client : MP3 文件
 - [server.py:256-297](file://server.py#L256-L297)
 - [server.py:300-360](file://server.py#L300-L360)
 - [server.py:367-425](file://server.py#L367-L425)
+- [qwen-to-data8.py:336-376](file://qwen-to-data8.py#L336-L376)
+- [qwen-to-data8.py:284-401](file://qwen-to-data8.py#L284-L401)
 - [kokoserver.py:183-194](file://kokoserver.py#L183-L194)
 
 ## 详细组件分析
@@ -422,17 +451,99 @@ API-->>Client : FileResponse MP3
 - [kokoserver.py:192-194](file://kokoserver.py#L192-L194)
 - [kokoserver.py:106-155](file://kokoserver.py#L106-L155)
 
+### 导出视频端点
+- 端点：POST /api/export
+- 请求类型：application/json
+- 请求体：空（或可包含导出配置参数）
+- 响应类型：application/json
+- 处理流程：
+  - 检查ffmpeg可用性
+  - 读取并按batch_index排序导出记录
+  - 生成SRT字幕文件和音频合并列表
+  - 拼接所有WAV音频为merged.wav
+  - 合成最终MP4视频（嵌入字幕或无字幕回退）
+  - 清理临时文件
+- 响应格式：
+  - 成功：{"url": "/exports/export_YYYYMMDD_HHMMSS.mp4", "filename": "export_YYYYMMDD_HHMMSS.mp4"}
+  - 失败：{"error": "错误描述"}
+- 错误处理：
+  - 500：ffmpeg未找到、音频拼接失败、视频合成失败、无记录可导出
+
+**请求示例**
+- curl
+  - curl -X POST "http://127.0.0.1:8000/api/export" -H "Content-Type: application/json"
+
+**章节来源**
+- [qwen-to-data8.py:82-267](file://qwen-to-data8.py#L82-L267)
+- [qwen-to-data8.py:356-371](file://qwen-to-data8.py#L356-L371)
+
+### 注入测试记录端点
+- 端点：POST /api/inject_test
+- 请求类型：application/json
+- 请求体：{"records": [{"wav": "路径", "text": "文本", "batch_index": 索引}]}
+- 响应类型：application/json
+- 处理流程：
+  - 解析JSON请求体
+  - 遍历records数组，调用_export_add函数添加到导出队列
+  - 返回注入结果统计
+- 响应格式：
+  - 成功：{"ok": true, "count": N}
+  - 失败：{"error": "错误描述"}
+- 用途：测试导出功能，预先注入音频片段和对应的文本
+
+**请求示例**
+- curl
+  - curl -X POST "http://127.0.0.1:8000/api/inject_test" -H "Content-Type: application/json" -d '{"records": [{"wav": "/path/to/audio.wav", "text": "测试文本", "batch_index": 0}]}'
+
+**章节来源**
+- [qwen-to-data8.py:75-79](file://qwen-to-data8.py#L75-L79)
+- [qwen-to-data8.py:338-354](file://qwen-to-data8.py#L338-L354)
+- [_test_export.py:24-46](file://_test_export.py#L24-L46)
+
+### WebSocket字幕服务端点
+- 端点：WebSocket /ws/subtitles
+- 握手：服务器接受连接后立即建立WebSocket连接
+- 消息类型：
+  - events：批次事件数据
+    - {"type": "events", "batch_index": N, "count": N, "events": [...]}
+  - narration：解说文本
+    - {"type": "narration", "batch_index": N, "text": "..."}
+  - subtitle：字幕显示
+    - {"type": "subtitle", "batch_index": N, "text": "...", "duration": N}
+  - log：日志消息
+    - {"type": "log", "tag": "...", "message": "..."}
+- 处理流程：
+  - 向所有连接的客户端广播字幕数据
+  - 支持事件、日志和字幕的实时同步
+  - 自动播放视频与音频同步
+- 端口配置：
+  - 默认端口：8765（可通过WS_PORT环境变量配置）
+  - HTTP静态文件服务：端口+1
+
+**请求示例**
+- JavaScript
+  - const ws = new WebSocket("ws://127.0.0.1:8765/ws/subtitles");
+
+**章节来源**
+- [qwen-to-data8.py:269-282](file://qwen-to-data8.py#L269-L282)
+- [qwen-to-data8.py:292-311](file://qwen-to-data8.py#L292-L311)
+- [qwen-to-data8.py:1795-1799](file://qwen-to-data8.py#L1795-L1799)
+
 ### 演示页面与前端集成要点
 - 端点：GET /demo
 - 功能：麦克风授权、录音上传识别、实时识别、TTS合成与播放
+- **新增** 字幕播放器：subtitle_player.html提供完整的字幕播放界面
 - 前端要点：
   - 上传文件到/trascribe
   - WebSocket连接/ws/asr发送PCM16LE帧
   - POST /tts获取DashScope音频URL并播放
   - **新增** POST /tts/kokoro获取Kokoro音频URL并播放
+  - **新增** POST /api/export触发视频导出
+  - **新增** WebSocket连接/ws/subtitles接收字幕和事件
 
 **章节来源**
 - [server.py:199-209](file://server.py#L199-L209)
+- [subtitle_player.html:270-314](file://subtitle_player.html#L270-L314)
 - [demo.html:1-685](file://demo.html#L1-L685)
 - [README.md:151-182](file://README.md#L151-L182)
 
@@ -444,8 +555,10 @@ API-->>Client : FileResponse MP3
 - edge-tts：Edge TTS音色查询与合成
 - kokoro：**新增** Kokoro TTS本地合成
 - pydub：音频处理（变速、拼接）
-- ffmpeg：音频转码与变速
+- ffmpeg：音频转码与变速，**新增** 视频合成
 - python-dotenv：加载.env环境变量
+- **新增** websockets：WebSocket字幕服务
+- **新增** http.server：HTTP静态文件服务
 
 ```mermaid
 graph LR
@@ -463,6 +576,10 @@ E --> FF
 Q["qwen3stream.py"] --> DS
 K["kokoserver.py"] --> KM["kokoro"]
 K --> SF["soundfile"]
+D8["qwen-to-data8.py"] --> WS["websockets"]
+D8 --> FF
+D8 --> SP["subtitle_player.html"]
+TE["_test_export.py"] --> D8
 ```
 
 **图表来源**
@@ -471,6 +588,7 @@ K --> SF["soundfile"]
 - [edge_subtitle_voiceover.py:11-13](file://edge_subtitle_voiceover.py#L11-L13)
 - [qwen3stream.py:5-7](file://qwen3stream.py#L5-L7)
 - [kokoserver.py:14](file://kokoserver.py#L14)
+- [qwen-to-data8.py:59-64](file://qwen-to-data8.py#L59-L64)
 
 **章节来源**
 - [requirements.txt:1-13](file://requirements.txt#L1-L13)
@@ -481,7 +599,9 @@ K --> SF["soundfile"]
 - FFmpeg转码：在WEBM/OGG等格式上进行，确保统一输入格式
 - 并发控制：ASR推理使用锁避免GPU内存竞争
 - 音频变速：使用FFmpeg atempo，支持多级组合以达到目标速度
-- **新增** Kokoro TTS：本地模型加载优化，支持多音色文件格式
+- **新增** 导出视频：使用ThreadingHTTPServer支持并发请求，避免大文件下载阻塞其他请求
+- **新增** WebSocket广播：线程安全的字幕消息广播，支持多客户端连接
+- **新增** 字幕同步：首条事件消息定位视频，首条字幕消息同步播放
 
 ## 故障排除指南
 常见问题与处理：
@@ -490,13 +610,15 @@ K --> SF["soundfile"]
 - 缺少DashScope API Key：在.env中设置DASHSCOPE_API_KEY
 - WEBM/OGG转码失败：在.env中设置FFMPEG_PATH指向ffmpeg.exe绝对路径
 - CORS跨域问题：默认允许所有来源，可按需调整
-- **新增** Kokoro TTS模型加载失败：检查KOKORO_LOCAL_MODEL_DIR目录结构和权限
+- **新增** 导出视频失败：检查ffmpeg安装和PATH配置，确认有音频片段可导出
+- **新增** WebSocket字幕服务启动失败：检查端口占用和websockets包安装
+- **新增** 字幕播放器无法连接：确认WebSocket端口配置正确
 
 **章节来源**
 - [README.md:194-204](file://README.md#L194-L204)
 
 ## 结论
-本API设计围绕语音识别与合成两大核心能力，提供REST与WebSocket两种交互模式，满足批量识别、实时流式识别、TTS合成与字幕配音等场景。通过环境变量与配置文件实现灵活部署，配合演示页面展示前端集成方式。新增的Kokoro TTS端点提供了本地化的中文语音合成能力，支持同步与流式两种模式，丰富了语音合成的选择。
+本API设计围绕语音识别与合成两大核心能力，提供REST与WebSocket两种交互模式，满足批量识别、实时流式识别、TTS合成与字幕配音等场景。**新增**的qwen-to-data8.py模块提供了完整的字幕WebSocket服务和视频导出功能，支持实时字幕广播、事件同步和视频合成。通过环境变量与配置文件实现灵活部署，配合演示页面展示前端集成方式。新增的导出功能使得音频片段可以自动生成带字幕的视频文件，丰富了项目的应用场景。
 
 ## 附录
 
@@ -539,6 +661,17 @@ K --> SF["soundfile"]
   - Content-Type：application/json
   - Body：{"text": "...", "voice": "zm_yunxia", "speed": 1.0}
   - 响应：SSE事件流（status/progress/complete）
+- **新增** POST /api/inject_test
+  - Content-Type：application/json
+  - Body：{"records": [{"wav": "路径", "text": "文本", "batch_index": 索引}]}
+  - 响应：{"ok": true, "count": N}
+- **新增** POST /api/export
+  - Content-Type：application/json
+  - Body：空
+  - 响应：{"url": "/exports/export_YYYYMMDD_HHMMSS.mp4", "filename": "export_YYYYMMDD_HHMMSS.mp4"} 或 {"error": "..."}
+- **新增** WebSocket /ws/subtitles
+  - 消息类型：events/narration/subtitle/log
+  - 响应：实时字幕、事件和日志消息
 
 **章节来源**
 - [README.md:100-147](file://README.md#L100-L147)
@@ -546,4 +679,7 @@ K --> SF["soundfile"]
 - [server.py:212-247](file://server.py#L212-L247)
 - [server.py:256-297](file://server.py#L256-L297)
 - [server.py:300-360](file://server.py#L300-L360)
+- [qwen-to-data8.py:336-376](file://qwen-to-data8.py#L336-L376)
+- [qwen-to-data8.py:269-282](file://qwen-to-data8.py#L269-L282)
+- [qwen-to-data8.py:1795-1799](file://qwen-to-data8.py#L1795-L1799)
 - [kokoserver.py:183-194](file://kokoserver.py#L183-L194)

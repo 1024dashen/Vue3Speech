@@ -9,7 +9,17 @@
 - [README.md](file://README.md)
 - [requirements.txt](file://requirements.txt)
 - [subtitles.json](file://subtitles.json)
+- [qwen-to-data8.py](file://qwen-to-data8.py)
+- [subtitle_player.html](file://subtitle_player.html)
+- [_test_export.py](file://_test_export.py)
 </cite>
+
+## 更新摘要
+**变更内容**
+- 新增 /api/inject_test 端点用于测试记录注入
+- 新增 /api/export 端点用于视频导出功能
+- 增强 WebSocket 服务以支持视频导出的实时反馈
+- 更新视频导出流程和相关API交互
 
 ## 目录
 1. [简介](#简介)
@@ -24,7 +34,7 @@
 
 ## 简介
 
-Vue3 Speech 是一个基于 Vue3 和 FastAPI 构建的语音应用，集成了语音识别（ASR）和语音合成（TTS）功能。该项目提供了完整的语音处理解决方案，包括实时语音识别、批量音频转录、语音合成以及字幕配音生成等功能。
+Vue3 Speech 是一个基于 Vue3 和 FastAPI 构建的语音应用，集成了语音识别（ASR）和语音合成（TTS）功能。该项目提供了完整的语音处理解决方案，包括实时语音识别、批量音频转录、语音合成以及字幕配音生成等功能。**更新**：新增了视频导出功能，支持将音频片段和字幕合成到视频中。
 
 ## 项目结构
 
@@ -34,31 +44,37 @@ subgraph "前端层"
 Vue[Vue3 应用]
 Demo[demo.html 演示页面]
 Recorder[SpeechRecorder.vue 录音组件]
+Player[subtitle_player.html 字幕播放器]
 end
 subgraph "后端层"
 FastAPI[FastAPI 核心服务]
 ASR[Qwen3-ASR 模型]
 TTS[DashScope TTS]
 EdgeTTS[Microsoft Edge TTS]
+Export[qwen-to-data8.py 导出服务]
 end
 subgraph "工具层"
-FFmpeg[FFmpeg 音频处理]
+FFmpeg[FFmpeg 音频/视频处理]
 WebSocket[WebSocket 实时通信]
 CORS[CORS 中间件]
+ExportCache[导出缓存系统]
 end
 Vue --> FastAPI
 Demo --> FastAPI
 Recorder --> FastAPI
+Player --> Export
 FastAPI --> ASR
 FastAPI --> TTS
 FastAPI --> EdgeTTS
-FastAPI --> FFmpeg
-FastAPI --> WebSocket
+Export --> FFmpeg
+Export --> WebSocket
+Export --> ExportCache
 FastAPI --> CORS
 ```
 
 **图表来源**
 - [server.py:67-76](file://server.py#L67-L76)
+- [qwen-to-data8.py:284-401](file://qwen-to-data8.py#L284-L401)
 - [requirements.txt:1-13](file://requirements.txt#L1-L13)
 
 **章节来源**
@@ -77,14 +93,21 @@ FastAPI --> CORS
 - **Edge TTS**：Microsoft Edge 语音合成服务
 - **字幕配音**：基于时间轴的字幕同步配音生成
 
+### 视频导出组件
+- **导出服务**：基于 qwen-to-data8.py 的视频导出功能
+- **音频拼接**：将多个音频片段按时间顺序拼接
+- **字幕嵌入**：生成SRT字幕并嵌入到视频中
+- **实时反馈**：通过WebSocket提供导出进度和状态
+
 ### 辅助组件
-- **FFmpeg**：音频格式转换和处理
-- **WebSocket**：实时音频流传输
+- **FFmpeg**：音频格式转换和视频处理
+- **WebSocket**：实时音频流传输和导出状态反馈
 - **CORS**：跨域资源共享支持
 
 **章节来源**
 - [README.md:21-27](file://README.md#L21-L27)
 - [server.py:88-95](file://server.py#L88-L95)
+- [qwen-to-data8.py:76-267](file://qwen-to-data8.py#L76-L267)
 
 ## 架构概览
 
@@ -93,29 +116,39 @@ graph TB
 subgraph "客户端"
 Browser[浏览器]
 Mobile[移动端应用]
+Player[字幕播放器]
 end
 subgraph "API 网关"
 Router[FastAPI 路由器]
 Middleware[中间件层]
+ExportRouter[qwen-to-data8.py 导出路由]
 end
 subgraph "业务逻辑层"
 Transcribe[转录服务]
 TTS[语音合成服务]
 Voiceover[字幕配音服务]
+Export[视频导出服务]
 WebSocket[WebSocket 服务]
 end
 subgraph "数据层"
 Model[ASR 模型]
 VoiceCatalog[TTS 语音目录]
 Cache[缓存系统]
+ExportRecords[导出记录队列]
+ExportCache[导出文件缓存]
 end
 Browser --> Router
 Mobile --> Router
+Player --> ExportRouter
 Router --> Middleware
 Middleware --> Transcribe
 Middleware --> TTS
 Middleware --> Voiceover
 Middleware --> WebSocket
+ExportRouter --> Export
+Export --> ExportRecords
+Export --> ExportCache
+Export --> FFmpeg
 Transcribe --> Model
 TTS --> VoiceCatalog
 Voiceover --> Cache
@@ -124,6 +157,7 @@ Voiceover --> Cache
 **图表来源**
 - [server.py:67-95](file://server.py#L67-L95)
 - [server.py:124-197](file://server.py#L124-L197)
+- [qwen-to-data8.py:284-401](file://qwen-to-data8.py#L284-L401)
 
 ## 详细端点文档
 
@@ -586,6 +620,137 @@ curl -X GET http://localhost:8000/tts/edge-voiceover-files/1234567890abcdef12345
 **章节来源**
 - [server.py:348-360](file://server.py#L348-L360)
 
+### 测试记录注入端点
+
+#### POST /api/inject_test
+**描述**：用于测试目的的记录注入端点，向导出队列添加测试音频记录
+
+**请求参数**：
+- Content-Type: application/json
+- 请求体：JSON 对象
+
+**请求体参数**：
+- records (array, 必需)：测试记录数组
+
+**记录参数**：
+- wav (string, 必需)：WAV音频文件的绝对路径
+- text (string, 可选)：对应的解说文本
+- batch_index (integer, 可选)：批次索引，用于排序
+
+**响应格式**：
+```json
+{
+  "ok": true,
+  "count": 4
+}
+```
+
+**状态码**：
+- 200 OK：注入成功
+- 500 Internal Server Error：注入过程中发生异常
+
+**请求示例**：
+```bash
+curl -X POST http://localhost:8000/api/inject_test \
+  -H "Content-Type: application/json" \
+  -d '{
+    "records": [
+      {
+        "wav": "/absolute/path/to/audio1.wav",
+        "text": "测试音频1",
+        "batch_index": 0
+      }
+    ]
+  }'
+```
+
+**响应示例**：
+```json
+{
+  "ok": true,
+  "count": 1
+}
+```
+
+**章节来源**
+- [qwen-to-data8.py:336-355](file://qwen-to-data8.py#L336-L355)
+- [_test_export.py:24-46](file://_test_export.py#L24-L46)
+
+### 视频导出端点
+
+#### POST /api/export
+**描述**：触发视频导出功能，将音频片段和字幕合成到视频中
+
+**请求参数**：
+- Content-Type: application/json
+- 请求体：空对象
+
+**响应格式**：
+```json
+{
+  "url": "/exports/export_20260520_174634.mp4",
+  "filename": "export_20260520_174634.mp4"
+}
+```
+
+**状态码**：
+- 200 OK：导出成功
+- 500 Internal Server Error：导出过程中发生错误
+
+**请求示例**：
+```bash
+curl -X POST http://localhost:8000/api/export
+```
+
+**响应示例**：
+```json
+{
+  "url": "/exports/export_20260520_174634.mp4",
+  "filename": "export_20260520_174634.mp4"
+}
+```
+
+**章节来源**
+- [qwen-to-data8.py:356-371](file://qwen-to-data8.py#L356-L371)
+- [subtitle_player.html:286-314](file://subtitle_player.html#L286-L314)
+
+### 字幕播放器端点
+
+#### GET /subtitle_player.html
+**描述**：返回字幕播放器页面，支持实时字幕显示和视频导出功能
+
+**请求参数**：
+- 无参数
+
+**响应格式**：HTML 页面内容
+
+**状态码**：
+- 200 OK：成功返回播放器页面
+- 404 Not Found：subtitle_player.html 文件不存在
+
+**请求示例**：
+```bash
+curl -X GET http://localhost:8000/subtitle_player.html
+```
+
+**响应示例**：
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>字幕播放器</title>
+    <!-- HTML 内容 -->
+</head>
+<body>
+    <!-- 播放器界面 -->
+</body>
+</html>
+```
+
+**章节来源**
+- [qwen-to-data8.py:316-334](file://qwen-to-data8.py#L316-L334)
+- [subtitle_player.html:1-501](file://subtitle_player.html#L1-L501)
+
 ## 依赖分析
 
 ### 外部依赖
@@ -597,6 +762,7 @@ FastAPI[FastAPI 0.104.1]
 Uvicorn[Uvicorn 0.23.2]
 Torch[Torch 2.1.0]
 QwenASR[Qwen-ASR 1.7B]
+ExportService[qwen-to-data8.py]
 end
 subgraph "语音服务"
 DashScope[DashScope API]
@@ -612,6 +778,7 @@ subgraph "开发工具"
 PythonEnv[Python 3.10+]
 DotEnv[python-dotenv]
 PyZMQ[pyzmq]
+WebSocket[websockets]
 end
 FastAPI --> DashScope
 FastAPI --> EdgeTTS
@@ -620,10 +787,14 @@ FastAPI --> PyDub
 FastAPI --> SoundFile
 FastAPI --> SoundDevice
 FastAPI --> QwenASR
+ExportService --> FFmpeg
+ExportService --> WebSocket
+ExportService --> DotEnv
 ```
 
 **图表来源**
 - [requirements.txt:1-13](file://requirements.txt#L1-L13)
+- [qwen-to-data8.py:59-64](file://qwen-to-data8.py#L59-L64)
 
 ### 内部模块依赖
 
@@ -632,26 +803,33 @@ graph TB
 subgraph "主服务模块"
 Server[server.py]
 EdgeVoiceover[edge_subtitle_voiceover.py]
+ExportService[qwen-to-data8.py]
 end
 subgraph "配置文件"
 Env[.env 环境变量]
 VoiceCatalog[tts_voices_catalog.json]
 Subtitles[subtitles.json]
+TestExport[_test_export.py]
 end
 subgraph "演示文件"
 Demo[demo.html]
 SpeechRecorder[SpeechRecorder.vue]
+Player[subtitle_player.html]
 end
 Server --> EdgeVoiceover
 Server --> VoiceCatalog
 Server --> Env
+ExportService --> TestExport
+ExportService --> Player
 Demo --> Server
 SpeechRecorder --> Server
+Player --> ExportService
 ```
 
 **图表来源**
 - [server.py:24-31](file://server.py#L24-L31)
 - [tts_voices_catalog.json:1-54](file://tts_voices_catalog.json#L1-L54)
+- [qwen-to-data8.py:402-408](file://qwen-to-data8.py#L402-L408)
 
 **章节来源**
 - [requirements.txt:1-13](file://requirements.txt#L1-L13)
@@ -674,10 +852,17 @@ SpeechRecorder --> Server
 - **缓存策略**：字幕配音文件缓存，减少重复生成
 - **资源池**：合理管理 DashScope API 调用频率
 
+### 视频导出优化
+- **并发导出**：支持多批次音频片段的并发处理
+- **内存管理**：使用临时目录存储中间文件，完成后自动清理
+- **FFmpeg 优化**：使用高效的音频拼接和视频合成算法
+- **字幕生成**：自动生成SRT字幕文件，支持硬字幕嵌入
+
 ### 网络性能
 - **CORS 配置**：允许跨域访问，便于前端集成
-- **WebSocket 连接**：低延迟实时通信
+- **WebSocket 连接**：低延迟实时通信，支持导出状态反馈
 - **静态文件服务**：高效提供演示页面和音频文件
+- **ThreadingHTTPServer**：支持并发请求，避免大文件下载阻塞其他请求
 
 ## 故障排除指南
 
@@ -748,6 +933,45 @@ app.add_middleware(
 )
 ```
 
+#### 6. 视频导出失败
+**现象**：调用 `/api/export` 端点时报错
+**原因**：
+- FFmpeg 未安装或不可用
+- 导出记录为空
+- 视频文件不存在
+
+**解决方案**：
+```bash
+# 检查 FFmpeg 安装
+ffmpeg -version
+
+# 确保有导出记录
+curl -X POST http://localhost:8000/api/inject_test -d '{"records": [...]}' -H "Content-Type: application/json"
+
+# 检查视频文件是否存在
+ls -la static/test.mp4
+```
+
+#### 7. WebSocket 导出状态反馈失败
+**现象**：字幕播放器无法接收导出状态
+**原因**：
+- WebSocket 服务未启动
+- 端口冲突
+- 网络配置问题
+
+**解决方案**：
+```bash
+# 检查 WebSocket 服务端口
+netstat -an | grep 8765
+
+# 检查 HTTP 服务端口
+netstat -an | grep 8766
+
+# 修改端口配置
+export WS_PORT=8767
+export HTTP_PORT=8768
+```
+
 ### 错误代码对照表
 
 | 状态码 | 错误类型 | 可能原因 | 解决方案 |
@@ -757,30 +981,36 @@ app.add_middleware(
 | 500 | Internal Server Error | 服务器内部错误 | 检查日志文件，重启服务 |
 | 502 | Bad Gateway | 外部服务连接失败 | 检查 DashScope API 或 Edge TTS 服务 |
 | 503 | Service Unavailable | 服务暂时不可用 | 稍后重试或检查服务状态 |
+| 504 | Gateway Timeout | 导出操作超时 | 检查 FFmpeg 安装和系统资源 |
 
 **章节来源**
 - [README.md:194-204](file://README.md#L194-L204)
 - [server.py:215-217](file://server.py#L215-L217)
 - [server.py:394-410](file://server.py#L394-L410)
+- [qwen-to-data8.py:92-95](file://qwen-to-data8.py#L92-L95)
 
 ## 结论
 
-Vue3 Speech 项目提供了一个完整的语音处理解决方案，涵盖了从语音识别到语音合成的全流程。通过 RESTful API 和 WebSocket 服务，开发者可以轻松集成语音功能到各种应用场景中。
+Vue3 Speech 项目提供了一个完整的语音处理解决方案，涵盖了从语音识别到语音合成再到视频导出的全流程。通过 RESTful API 和 WebSocket 服务，开发者可以轻松集成语音功能到各种应用场景中。
 
 ### 主要优势
 - **功能完整**：支持实时识别、批量转录、语音合成、字幕配音等多种功能
 - **易于集成**：提供清晰的 API 接口和详细的文档说明
 - **性能优化**：采用多种优化策略确保良好的用户体验
 - **灵活部署**：支持本地部署和云端部署
+- **扩展性强**：新增的视频导出功能为项目提供了更强大的媒体处理能力
 
 ### 技术特点
 - 基于 FastAPI 的高性能后端服务
 - 集成多种语音服务提供商
 - 完善的错误处理和监控机制
 - 良好的跨平台兼容性
+- 实时导出状态反馈的WebSocket服务
 
 ### 未来发展方向
 - 扩展更多语音服务提供商
 - 增强实时识别的准确性和延迟
 - 优化大规模并发处理能力
 - 提供更丰富的语音合成选项
+- 增强视频导出功能的定制化选项
+- 支持更多视频格式和编码器

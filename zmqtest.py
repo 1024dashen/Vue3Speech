@@ -4,8 +4,8 @@ import json
 
 def main():
     parser = argparse.ArgumentParser(description="HADO ZMQ event subscriber")
-    # parser.add_argument("--endpoint", default="tcp://192.168.31.145:5557", help="ZMQ PUB endpoint")
-    parser.add_argument("--endpoint", default="tcp://localhost:5557", help="ZMQ PUB endpoint")
+    parser.add_argument("--endpoint", default="tcp://192.168.31.145:5557", help="ZMQ PUB endpoint")
+    # parser.add_argument("--endpoint", default="tcp://localhost:5557", help="ZMQ PUB endpoint")
     parser.add_argument("--topic", default="hado.event", help="ZMQ topic")
     parser.add_argument(
         "--output",

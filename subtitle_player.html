@@ -277,7 +277,8 @@
   let ws = null;
   let subtitleTimer = null;
   let totalEvents = 0;
-  let videoStarted = false;  // 是否已由首条消息触发播放
+  let videoStarted = false;  // 是否已由首条消息触发定位
+  let videoPlaying = false;  // 视频是否已开始播放（首条解说音频时触发）
 
   const btnExport = document.getElementById('btnExport');
   const exportStatus = document.getElementById('exportStatus');
@@ -425,23 +426,16 @@
         switch (data.type) {
           case 'events':
             addEvents(data);
-            // 首条事件消息：定位视频到 time_seconds 并开始播放
+            // 首条事件消息：仅定位视频到 time_seconds，不播放（等首条解说音频一起播放）
             if (!videoStarted && data.events && data.events.length > 0) {
               videoStarted = true;
               const firstTs = data.events[0].time_seconds;
               const startSec = parseFloat(firstTs);
               if (!isNaN(startSec) && startSec > 0) {
-                // 等 seek 完成后再播放，否则 play() 会被浏览器忽略
-                video.addEventListener('seeked', function onSeeked() {
-                  video.removeEventListener('seeked', onSeeked);
-                  video.play().catch(() => {});
-                  addLog('SYS', `视频从 ${startSec.toFixed(1)}s 开始播放`);
-                });
                 video.currentTime = startSec;
-                addLog('SYS', `视频定位到 ${startSec.toFixed(1)}s…`);
+                addLog('SYS', `视频定位到 ${startSec.toFixed(1)}s，等待解说音频…`);
               } else {
-                video.play().catch(() => {});
-                addLog('SYS', '视频开始播放');
+                addLog('SYS', '等待解说音频后同步播放…');
               }
             }
             break;
@@ -450,6 +444,23 @@
             break;
           case 'subtitle':
             showSubtitle(data.text, data.duration);
+            // 首条字幕（解说音频开始播放）：同步播放视频
+            if (!videoPlaying) {
+              videoPlaying = true;
+              // 如果还在 seek 中，等 seek 完成再播放
+              const doPlay = () => {
+                video.play().catch(() => {});
+                addLog('SYS', '视频与解说音频同步播放');
+              };
+              if (video.seeking) {
+                video.addEventListener('seeked', function onSeeked() {
+                  video.removeEventListener('seeked', onSeeked);
+                  doPlay();
+                });
+              } else {
+                doPlay();
+              }
+            }
             break;
           case 'log':
             addLog(data.tag || 'SYS', data.message || '');
@@ -478,10 +489,10 @@
     setTimeout(connectWS, 500);
   })();
 
-  // 视频加载后不自动播放，等待首条 WS 事件消息触发
+  // 视频加载后不自动播放，等待首条解说音频消息触发
   video.addEventListener('canplay', () => {
-    // 仅在首条消息到来前暂停，之后不再干预（避免 seek 后 canplay 重新触发导致 pause 覆盖 play）
-    if (!videoStarted) video.pause();
+    // 仅在视频未开始播放前暂停，之后不再干预
+    if (!videoPlaying) video.pause();
   });
 </script>
 

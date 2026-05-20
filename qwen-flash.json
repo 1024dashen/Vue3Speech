@@ -3,385 +3,173 @@
     "batch_index": 0,
     "total_batches": null,
     "is_final_batch": false,
-    "line_count": 3,
+    "line_count": 4,
     "event_ids": [
-      "hado_video_01-action-713-red_team",
-      "hado_video_01-action-766-blue_team",
-      "hado_video_01-action-772-red_team"
+      "hado_video_01-action-192-blue_team",
+      "hado_video_01-action-245-blue_team",
+      "hado_video_01-action-245-red_team",
+      "hado_video_01-action-299-blue_team"
     ],
     "model": {
-      "narration": "红方下蹲闪避，蓝方抬手进攻"
+      "narration": "蓝方下蹲闪避，红方抬手进攻"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "红方下蹲闪避，蓝方抬手进攻",
-    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_8acc74618e3948f0b31d9ef59e967d2b.wav",
+    "narration": "蓝方下蹲闪避，红方抬手进攻",
+    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_5623a6b52f4f48bd93fd4893d26fbdf4.wav",
     "tts_kokoro_duration": 4.125,
-    "tts_kokoro_synthesis_time": 3.548,
+    "tts_kokoro_synthesis_time": 3.339,
     "tts_playback": "kokoro_local"
   },
   {
     "batch_index": 1,
     "total_batches": null,
     "is_final_batch": false,
-    "line_count": 3,
+    "line_count": 4,
     "event_ids": [
-      "hado_video_01-action-860-red_team",
-      "hado_video_01-action-873-blue_team",
-      "hado_video_01-score-914-red_team"
+      "hado_video_01-action-353-red_team",
+      "hado_video_01-action-373-blue_team",
+      "hado_video_01-action-432-blue_team",
+      "hado_video_01-action-439-red_team"
     ],
     "model": {
-      "narration": "红方抬手进攻蓝方下蹲防守"
+      "narration": "红方下蹲闪避蓝方抬手进攻"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "红方抬手进攻蓝方下蹲防守",
-    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_09f42918dd8b4b89a9cd55d3c72547e2.wav",
-    "tts_kokoro_duration": 3.925,
-    "tts_kokoro_synthesis_time": 2.71,
+    "narration": "红方下蹲闪避蓝方抬手进攻",
+    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_abac08efb5de4ce383a9fb91991f3431.wav",
+    "tts_kokoro_duration": 3.9,
+    "tts_kokoro_synthesis_time": 2.75,
     "tts_playback": "kokoro_local"
   },
   {
     "batch_index": 2,
     "total_batches": null,
     "is_final_batch": false,
-    "line_count": 3,
+    "line_count": 4,
     "event_ids": [
-      "hado_video_01-action-936-red_team",
-      "hado_video_01-action-956-blue_team",
-      "hado_video_01-action-991-red_team"
+      "hado_video_01-action-489-blue_team",
+      "hado_video_01-action-535-red_team",
+      "hado_video_01-action-626-red_team",
+      "hado_video_01-score-626-blue_team"
     ],
     "model": {
-      "narration": "红方下蹲避攻，蓝方抬手强攻，红方迅速反击"
+      "narration": "蓝方下蹲闪避，红方抬手进攻"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "红方下蹲避攻，蓝方抬手强攻，红方迅速反击",
-    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_b66ad4dbbe814ae5a540eafd9a97c887.wav",
-    "tts_kokoro_duration": 5.125,
-    "tts_kokoro_synthesis_time": 3.599,
+    "narration": "蓝方下蹲闪避，红方抬手进攻",
+    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_2473020af33a40dc8d0ad5e7cf99eb33.wav",
+    "tts_kokoro_duration": 3.9,
+    "tts_kokoro_synthesis_time": 2.694,
     "tts_playback": "kokoro_local"
   },
   {
     "batch_index": 3,
     "total_batches": null,
     "is_final_batch": false,
-    "line_count": 3,
+    "line_count": 4,
     "event_ids": [
-      "hado_video_01-action-1004-blue_team",
-      "hado_video_01-score-1046-red_team",
-      "hado_video_01-action-1053-blue_team"
+      "hado_video_01-action-663-blue_team",
+      "hado_video_01-action-712-blue_team",
+      "hado_video_01-action-712-red_team",
+      "hado_video_01-action-769-blue_team"
     ],
     "model": {
-      "narration": "蓝方抬手进攻红方防守反击"
+      "narration": "蓝方下蹲避过攻势红方抬手反击"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "蓝方抬手进攻红方防守反击",
-    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_2d10a34c43ef4d2fa7d780c75fb0cbda.wav",
-    "tts_kokoro_duration": 3.625,
-    "tts_kokoro_synthesis_time": 2.555,
+    "narration": "蓝方下蹲避过攻势红方抬手反击",
+    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_3a63fd8d780e412f8716ced508a9f43e.wav",
+    "tts_kokoro_duration": 4.375,
+    "tts_kokoro_synthesis_time": 3.047,
     "tts_playback": "kokoro_local"
   },
   {
     "batch_index": 4,
     "total_batches": null,
     "is_final_batch": false,
-    "line_count": 3,
+    "line_count": 4,
     "event_ids": [
-      "hado_video_01-action-1065-red_team",
-      "hado_video_01-action-1114-blue_team",
-      "hado_video_01-action-1173-red_team"
+      "hado_video_01-action-794-red_team",
+      "hado_video_01-action-859-red_team",
+      "hado_video_01-action-871-blue_team",
+      "hado_video_01-score-916-red_team"
     ],
     "model": {
-      "narration": "红方下蹲防守，蓝方抬手进攻，红方再陷防守"
+      "narration": "红方抬手进攻蓝方防御反击"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "红方下蹲防守，蓝方抬手进攻，红方再陷防守",
-    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_22bd6eb1520f4027a5324e3aede0e424.wav",
-    "tts_kokoro_duration": 4.6,
-    "tts_kokoro_synthesis_time": 3.32,
+    "narration": "红方抬手进攻蓝方防御反击",
+    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_d329c653e382410db2fdf8a8a537c8d2.wav",
+    "tts_kokoro_duration": 3.925,
+    "tts_kokoro_synthesis_time": 2.713,
     "tts_playback": "kokoro_local"
   },
   {
     "batch_index": 5,
     "total_batches": null,
     "is_final_batch": false,
-    "line_count": 3,
+    "line_count": 4,
     "event_ids": [
-      "hado_video_01-score-1182-red_team",
-      "hado_video_01-action-1201-blue_team",
-      "hado_video_01-action-1243-red_team"
+      "hado_video_01-action-935-blue_team",
+      "hado_video_01-action-935-red_team",
+      "hado_video_01-action-988-blue_team",
+      "hado_video_01-action-1015-red_team"
     ],
     "model": {
-      "narration": "红方得分，蓝方下蹲防守"
+      "narration": "蓝方抬手进攻红方下蹲防守"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "红方得分，蓝方下蹲防守",
-    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_5c8ce802ef0e43c0a3ceeaff891d9104.wav",
-    "tts_kokoro_duration": 2.9,
-    "tts_kokoro_synthesis_time": 2.111,
+    "narration": "蓝方抬手进攻红方下蹲防守",
+    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_f8ca6f6d0f334af4adf4aa7828b515ef.wav",
+    "tts_kokoro_duration": 3.65,
+    "tts_kokoro_synthesis_time": 2.676,
     "tts_playback": "kokoro_local"
   },
   {
     "batch_index": 6,
     "total_batches": null,
     "is_final_batch": false,
-    "line_count": 3,
+    "line_count": 4,
     "event_ids": [
-      "hado_video_01-action-1256-blue_team",
-      "hado_video_01-score-1311-red_team",
-      "hado_video_01-action-1339-blue_team"
+      "hado_video_01-score-1027-red_team",
+      "hado_video_01-score-1046-red_team",
+      "hado_video_01-action-1052-blue_team",
+      "hado_video_01-action-1079-red_team"
     ],
     "model": {
-      "narration": "蓝方防御反击，红方得分"
+      "narration": "红方抬手进攻蓝方防御反击"
     },
     "policy_violations": [],
     "narration_revised": false,
     "revision_still_invalid": false,
-    "narration": "蓝方防御反击，红方得分",
-    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_454f6f3411504556a526591e45ac4795.wav",
-    "tts_kokoro_duration": 2.875,
-    "tts_kokoro_synthesis_time": 2.089,
+    "narration": "红方抬手进攻蓝方防御反击",
+    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_bc16f09c6e2c4e0f9a001e42fe84cd7a.wav",
+    "tts_kokoro_duration": 3.6,
+    "tts_kokoro_synthesis_time": 2.662,
     "tts_playback": "kokoro_local"
   },
   {
     "batch_index": 7,
     "total_batches": null,
     "is_final_batch": false,
-    "line_count": 3,
+    "line_count": 4,
     "event_ids": [
-      "hado_video_01-action-1359-red_team",
-      "hado_video_01-action-1407-blue_team",
-      "hado_video_01-action-1456-blue_team"
-    ],
-    "model": {
-      "narration": "红方防御反击，蓝方抬手进攻"
-    },
-    "policy_violations": [],
-    "narration_revised": false,
-    "revision_still_invalid": false,
-    "narration": "红方防御反击，蓝方抬手进攻",
-    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_79308a21f1154fc5b84feeb4a0bca673.wav",
-    "tts_kokoro_duration": 3.275,
-    "tts_kokoro_synthesis_time": 2.381,
-    "tts_playback": "kokoro_local"
-  },
-  {
-    "batch_index": 8,
-    "total_batches": null,
-    "is_final_batch": false,
-    "line_count": 3,
-    "event_ids": [
-      "hado_video_01-score-1456-blue_team",
-      "hado_video_01-action-1470-red_team",
-      "hado_video_01-action-1517-blue_team"
-    ],
-    "model": {
-      "narration": "蓝方得分，红方下蹲防守"
-    },
-    "policy_violations": [],
-    "narration_revised": false,
-    "revision_still_invalid": false,
-    "narration": "蓝方得分，红方下蹲防守",
-    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_b419bb01a7e14d31b20dd9d95055a0bb.wav",
-    "tts_kokoro_duration": 3.325,
-    "tts_kokoro_synthesis_time": 2.449,
-    "tts_playback": "kokoro_local"
-  },
-  {
-    "batch_index": 9,
-    "total_batches": null,
-    "is_final_batch": false,
-    "line_count": 3,
-    "event_ids": [
-      "hado_video_01-action-1530-red_team",
-      "hado_video_01-action-1572-blue_team",
-      "hado_video_01-action-1593-red_team"
-    ],
-    "model": {
-      "narration": "红方下蹲闪避，蓝方抬手进攻"
-    },
-    "policy_violations": [],
-    "narration_revised": false,
-    "revision_still_invalid": false,
-    "narration": "红方下蹲闪避，蓝方抬手进攻",
-    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_a95c0464964a4c1f84b291730dbe28ae.wav",
-    "tts_kokoro_duration": 3.875,
-    "tts_kokoro_synthesis_time": 2.717,
-    "tts_playback": "kokoro_local"
-  },
-  {
-    "batch_index": 10,
-    "total_batches": null,
-    "is_final_batch": false,
-    "line_count": 3,
-    "event_ids": [
-      "hado_video_01-action-1630-blue_team",
-      "hado_video_01-score-1637-red_team",
-      "hado_video_01-action-1651-red_team"
-    ],
-    "model": {
-      "narration": "蓝方下蹲防御红方抬手进攻"
-    },
-    "policy_violations": [],
-    "narration_revised": false,
-    "revision_still_invalid": false,
-    "narration": "蓝方下蹲防御红方抬手进攻",
-    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_e0d3d58339dc415ab7865c121db44f27.wav",
-    "tts_kokoro_duration": 3.6,
-    "tts_kokoro_synthesis_time": 2.516,
-    "tts_playback": "kokoro_local"
-  },
-  {
-    "batch_index": 11,
-    "total_batches": null,
-    "is_final_batch": false,
-    "line_count": 3,
-    "event_ids": [
-      "hado_video_01-score-1666-blue_team",
-      "hado_video_01-action-1709-blue_team",
-      "hado_video_01-action-1723-red_team"
-    ],
-    "model": {
-      "narration": "蓝方抬手进攻红方迅速反击"
-    },
-    "policy_violations": [],
-    "narration_revised": false,
-    "revision_still_invalid": false,
-    "narration": "蓝方抬手进攻红方迅速反击",
-    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_fd14ecf2306c43e59509536225b40dab.wav",
-    "tts_kokoro_duration": 3.175,
-    "tts_kokoro_synthesis_time": 2.263,
-    "tts_playback": "kokoro_local"
-  },
-  {
-    "batch_index": 12,
-    "total_batches": null,
-    "is_final_batch": false,
-    "line_count": 3,
-    "event_ids": [
-      "hado_video_01-action-1778-red_team",
-      "hado_video_01-action-1840-red_team",
-      "hado_video_01-action-1862-blue_team"
-    ],
-    "model": {
-      "narration": "红方抬手进攻，蓝方迅速下蹲防守"
-    },
-    "policy_violations": [],
-    "narration_revised": false,
-    "revision_still_invalid": false,
-    "narration": "红方抬手进攻，蓝方迅速下蹲防守",
-    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_333af123f38f4e5da1d861fc03ab942e.wav",
-    "tts_kokoro_duration": 3.75,
-    "tts_kokoro_synthesis_time": 2.602,
-    "tts_playback": "kokoro_local"
-  },
-  {
-    "batch_index": 13,
-    "total_batches": null,
-    "is_final_batch": false,
-    "line_count": 3,
-    "event_ids": [
-      "hado_video_01-action-1889-red_team",
-      "hado_video_01-action-1930-blue_team",
-      "hado_video_01-action-1951-red_team"
-    ],
-    "model": {
-      "narration": "红方下蹲防御，蓝方抬手进攻，红方迅速反击"
-    },
-    "policy_violations": [],
-    "narration_revised": false,
-    "revision_still_invalid": false,
-    "narration": "红方下蹲防御，蓝方抬手进攻，红方迅速反击",
-    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_c9e6e5089f374b6aa9da8f5d50b60997.wav",
-    "tts_kokoro_duration": 4.475,
-    "tts_kokoro_synthesis_time": 3.279,
-    "tts_playback": "kokoro_local"
-  },
-  {
-    "batch_index": 14,
-    "total_batches": null,
-    "is_final_batch": false,
-    "line_count": 3,
-    "event_ids": [
-      "hado_video_01-action-2038-red_team",
-      "hado_video_01-action-2052-blue_team",
-      "hado_video_01-score-2059-blue_team"
-    ],
-    "model": {
-      "narration": "红方防御反击，蓝方精准得分"
-    },
-    "policy_violations": [],
-    "narration_revised": false,
-    "revision_still_invalid": false,
-    "narration": "红方防御反击，蓝方精准得分",
-    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_662af07c7fb34a3484c580d42c4f40a2.wav",
-    "tts_kokoro_duration": 3.2,
-    "tts_kokoro_synthesis_time": 2.371,
-    "tts_playback": "kokoro_local"
-  },
-  {
-    "batch_index": 15,
-    "total_batches": null,
-    "is_final_batch": false,
-    "line_count": 3,
-    "event_ids": [
-      "hado_video_01-action-2110-blue_team",
-      "hado_video_01-action-2123-red_team",
-      "hado_video_01-action-2179-blue_team"
-    ],
-    "model": {
-      "narration": "蓝方抬手进攻，红方迅速反击"
-    },
-    "policy_violations": [],
-    "narration_revised": false,
-    "revision_still_invalid": false,
-    "narration": "蓝方抬手进攻，红方迅速反击",
-    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_cdcf503bf3f04c809e751784ed9665f0.wav",
-    "tts_kokoro_duration": 3.325,
-    "tts_kokoro_synthesis_time": 1.372,
-    "tts_playback": "kokoro_local"
-  },
-  {
-    "batch_index": 16,
-    "total_batches": null,
-    "is_final_batch": false,
-    "line_count": 3,
-    "event_ids": [
-      "hado_video_01-action-2216-red_team",
-      "hado_video_01-action-2237-blue_team",
-      "hado_video_01-action-2295-blue_team"
-    ],
-    "model": {
-      "narration": "蓝方抬手反击红方下蹲防守"
-    },
-    "policy_violations": [],
-    "narration_revised": false,
-    "revision_still_invalid": false,
-    "narration": "蓝方抬手反击红方下蹲防守",
-    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_39308c1ec1084a36b66a63e472eef075.wav",
-    "tts_kokoro_duration": 3.275,
-    "tts_kokoro_synthesis_time": 0.861,
-    "tts_playback": "kokoro_local"
-  },
-  {
-    "batch_index": 17,
-    "total_batches": null,
-    "is_final_batch": false,
-    "line_count": 3,
-    "event_ids": [
-      "hado_video_01-action-2302-red_team",
-      "hado_video_01-action-845-red_team",
-      "hado_video_01-action-861-blue_team"
+      "hado_video_01-action-1155-red_team",
+      "hado_video_01-action-1161-blue_team",
+      "hado_video_01-score-1181-red_team",
+      "hado_video_01-action-1212-red_team"
     ],
     "model": {
       "narration": "红方下蹲防御蓝方抬手进攻"
@@ -390,9 +178,9 @@
     "narration_revised": false,
     "revision_still_invalid": false,
     "narration": "红方下蹲防御蓝方抬手进攻",
-    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_9ae3f25016fd4ecdaef7302139c29326.wav",
-    "tts_kokoro_duration": 2.5,
-    "tts_kokoro_synthesis_time": 0.723,
+    "tts_local_file": "D:\\ShenProject\\Vue3Speech\\kokoro_output\\kokoro_64e4d277fe3340f49574e95ba64ee9d8.wav",
+    "tts_kokoro_duration": 3.15,
+    "tts_kokoro_synthesis_time": 2.199,
     "tts_playback": "kokoro_local"
   }
 ]
