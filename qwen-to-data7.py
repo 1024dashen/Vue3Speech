@@ -1470,7 +1470,7 @@ def main() -> None:
         "--zmq-jsonl-log",
         type=Path,
         default=None,
-        help="订阅事件 NDJSON 输出路径；未指定时自动为项目目录 zmq_events_<YYYYMMDD_HHMMSS>.jsonl",
+        help="订阅事件 NDJSON 输出路径；未指定时自动为 zmq_events/zmq_events_<YYYYMMDD_HHMMSS>.jsonl"
     )
     parser.add_argument("--output", type=Path, default=_ROOT / "qwen-flash.json", help="输出解说 JSON 数组")
     parser.add_argument("--schema", type=Path, default=_ROOT / "jsonschema.json", help="JSON Schema 文件")
@@ -1572,10 +1572,12 @@ def main() -> None:
         zmq_socket = context.socket(zmq.SUB)
         zmq_socket.connect(args.zmq_endpoint)
         zmq_socket.setsockopt_string(zmq.SUBSCRIBE, args.zmq_topic)
+        zmq_events_dir = _ROOT / "zmq_events"
+        zmq_events_dir.mkdir(exist_ok=True)
         zmq_events_log_path = (
             args.zmq_jsonl_log
             if args.zmq_jsonl_log is not None
-            else _ROOT / f"zmq_events_{time.strftime('%Y%m%d_%H%M%S')}.jsonl"
+            else zmq_events_dir / f"zmq_events_{time.strftime('%Y%m%d_%H%M%S')}.jsonl"
         )
         zmq_log_fp = open(zmq_events_log_path, "a", encoding="utf-8")
         print(
