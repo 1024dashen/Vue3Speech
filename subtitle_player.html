@@ -494,6 +494,26 @@
     // 仅在视频未开始播放前暂停，之后不再干预
     if (!videoPlaying) video.pause();
   });
+
+  // ---- 从 API 获取视频地址（成功则替换，失败保留默认 src）----
+  (async function loadVideoFromApi() {
+    const apiUrl = 'http://192.168.31.145:7658/urgent/api/gamevideo';
+    try {
+      const resp = await fetch(apiUrl);
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
+      }
+      const json = await resp.json();
+      if (json.code === 200 && json.data) {
+        video.src = json.data;
+        console.log('[视频] 接口返回视频地址:', json.data);
+      } else {
+        throw new Error(`接口返回异常: ${JSON.stringify(json)}`);
+      }
+    } catch (e) {
+      console.error('[视频] 接口请求失败，使用默认视频:', e.message);
+    }
+  })();
 </script>
 
 </body>

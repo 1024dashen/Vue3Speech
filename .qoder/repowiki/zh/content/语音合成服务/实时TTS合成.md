@@ -11,6 +11,7 @@
 - [qwen-to-data5.py](file://qwen-to-data5.py)
 - [qwen-to-data6.py](file://qwen-to-data6.py)
 - [qwen-to-data7.py](file://qwen-to-data7.py)
+- [qwen-to-data8.py](file://qwen-to-data8.py)
 - [requirements.txt](file://requirements.txt)
 - [tts_voices_catalog.json](file://tts_voices_catalog.json)
 - [qwen-to-date-prompts.json](file://qwen-to-date-prompts.json)
@@ -21,20 +22,19 @@
 - [zmqserver.py](file://zmqserver.py)
 - [test_kokoro.py](file://test_kokoro.py)
 - [zmq_events.jsonl](file://zmq_events.jsonl)
+- [zmq_events_20260520_134352.jsonl](file://zmq_events/zmq_events_20260520_134352.jsonl)
+- [zmq_events_20260520_185247.jsonl](file://zmq_events/zmq_events_20260520_185247.jsonl)
 - [zmqtest.py](file://zmqtest.py)
 - [subtitle_player.html](file://subtitle_player.html)
 </cite>
 
 ## 更新摘要
 **变更内容**
-- 增强了政策违规检测和自动修订功能，包括自动重写机制和违规检测系统
-- 改进了事件批处理系统，支持更复杂的多团队运动场景
-- 新增了WebSocket日志系统，提供实时日志广播和可视化监控
-- 增强了事件广播能力，支持多类型事件的实时传输
-- 集成了详细的TTS合成日志，提供完整的性能监控
-- 新增字幕WebSocket服务和HTTP静态文件服务
-- 改进的音频队列管理和浏览器播放协调机制
-- 优化了双线程并行流水线架构，提升系统吞吐量和响应性能
+- 数据结构优化：qwen-flash.json从17批减少到4批，显著提升事件处理效率
+- 新增ZMQ事件日志系统：提供详细的事件跟踪和元数据记录
+- 事件批处理效率提升：从3事件批处理升级到4事件批处理，事件处理效率大幅提升
+- WebSocket日志系统增强：实时日志广播和可视化监控能力得到加强
+- 双线程并行流水线架构：系统吞吐量和响应性能显著提升
 
 ## 目录
 1. [简介](#简介)
@@ -57,15 +57,17 @@
 - **多语言支持**：提供丰富的音色选择和多语言支持
 - **前端集成**：提供完整的Web界面和Vue3组件
 - **智能回退机制**：自动检测并选择最优TTS后端
-- **事件批处理**：高效处理ZMQ实时事件流
+- **事件批处理**：高效处理ZMQ实时事件流，现已支持4事件批处理
 - **自动文本修订**：政策违规自动重写功能
 - **性能监控**：详细的性能计时测量和HTTP往返时间跟踪
 - **错误处理**：完善的错误恢复机制和超时处理
 - **WebSocket日志系统**：实时日志广播和可视化监控
 - **增强事件广播**：多类型事件的实时传输和处理
 - **浏览器音频播放**：通过WebSocket实现远程音频播放协调
+- **视频-音频同步**：基于时间戳的精确视频-音频同步机制
+- **ZMQ事件日志系统**：新增的详细事件跟踪和元数据记录系统
 
-**重要更新**：项目新增了完整的WebSocket日志系统，包括实时日志广播、事件类型支持、音频队列深度监控等功能，为实时TTS系统提供了强大的可视化监控能力。同时，增强了政策违规检测和自动修订功能，改进了事件批处理系统，支持更复杂的多团队运动场景。
+**重要更新**：项目新增了完整的WebSocket日志系统，包括实时日志广播、事件类型支持、音频队列深度监控等功能，为实时TTS系统提供了强大的可视化监控能力。同时，增强了政策违规检测和自动修订功能，改进了事件批处理系统，支持更复杂的多团队运动场景。行动叙述系统现已从3事件批处理增加到4事件批处理，显著提升了叙述准确性。视频-音频同步机制得到增强，支持基于时间戳的精确同步，确保音频与视频的完美配合。新增的ZMQ事件日志系统提供了详细的事件跟踪和元数据记录，支持20个不同时间戳的事件文件，为系统监控和调试提供了强大支持。
 
 ## 项目结构
 
@@ -77,47 +79,59 @@ B[WebSocket处理<br/>ASR/TTS]
 C[音频处理<br/>PCM转换]
 D[WebSocket日志系统<br/>qwen-to-data7.py]
 E[事件广播系统<br/>qwen-to-data7.py]
+F[视频-音频同步<br/>qwen-to-data8.py]
+G[ZMQ事件日志系统<br/>zmq_events/*.jsonl]
 end
 subgraph "前端层"
-F[演示页面<br/>demo.html]
-G[Vue3组件<br/>SpeechRecorder.vue]
-H[字幕播放器<br/>subtitle_player.html]
+H[演示页面<br/>demo.html]
+I[Vue3组件<br/>SpeechRecorder.vue]
+J[字幕播放器<br/>subtitle_player.html]
 end
 subgraph "音频处理层"
-I[实时TTS<br/>qwen3stream.py]
-J[批量TTS<br/>ttstest.py]
-K[ZMQ集成<br/>qwen-to-data4.py]
-L[多后端TTS<br/>qwen-to-data7.py]
-M[双线程并行<br/>gen/tts]
-N[WebSocket服务<br/>qwen-to-data7.py]
+K[实时TTS<br/>qwen3stream.py]
+L[批量TTS<br/>ttstest.py]
+M[ZMQ集成<br/>qwen-to-data4.py]
+N[多后端TTS<br/>qwen-to-data7.py]
+O[双线程并行<br/>gen/tts]
+P[事件批处理<br/>qwen-to-data6.py]
+Q[实时TTS回调<br/>qwen-to-data7.py]
+R[ZMQ事件订阅<br/>zmqtest.py]
 end
 subgraph "配置层"
-O[TTS音色目录<br/>tts_voices_catalog.json]
-P[提示词配置<br/>qwen-to-date-prompts.json]
-Q[JSON Schema<br/>jsonschema.json]
-R[事件批处理<br/>qwen-to-data6.py]
-S[事件数据<br/>zmq_events.jsonl]
-T[日志系统<br/>WebSocket日志]
+S[TTS音色目录<br/>tts_voices_catalog.json]
+T[提示词配置<br/>qwen-to-date-prompts.json]
+U[JSON Schema<br/>jsonschema.json]
+V[事件批处理<br/>qwen-to-data6.py]
+W[事件数据<br/>zmq_events/*.jsonl]
+X[日志系统<br/>WebSocket日志]
+Y[视频配置<br/>qwen-to-data8.py]
+Z[环境配置<br/>.env文件]
 end
 A --> B
 A --> C
 A --> D
 A --> E
+A --> F
 A --> N
-F --> A
-G --> A
-H --> N
+H --> A
 I --> A
-J --> A
+J --> N
 K --> A
 L --> A
-M --> L
-O --> A
-P --> K
-Q --> K
-R --> K
-S --> K
-T --> D
+M --> A
+N --> A
+O --> M
+P --> M
+Q --> N
+R --> M
+S --> A
+T --> M
+U --> M
+V --> M
+W --> M
+X --> D
+Y --> F
+Z --> A
 ```
 
 **图表来源**
@@ -125,6 +139,7 @@ T --> D
 - [demo.html:1-685](file://demo.html#L1-L685)
 - [qwen3stream.py:1-196](file://qwen3stream.py#L1-L196)
 - [qwen-to-data7.py:1683-1696](file://qwen-to-data7.py#L1683-L1696)
+- [qwen-to-data8.py:2020-2052](file://qwen-to-data8.py#L2020-L2052)
 
 **章节来源**
 - [README.md:1-347](file://README.md#L1-L347)
@@ -263,8 +278,9 @@ Queue-->>Gen : 下一批次处理
 
 ### 8. 增强事件批处理系统
 
-**新增功能**：系统现已支持更复杂的多团队运动场景，包括：
+**重要更新**：系统现已支持4事件批处理，显著提升了叙述准确性：
 
+- **4事件批处理**：支持最多4条事件的批处理，提供更丰富的上下文信息
 - **动作事件处理**：支持raise_hand、squat、raise_hand+squat三种动作类型
 - **得分事件处理**：支持多团队得分场景，包含KO信息
 - **智能事件分类**：根据事件类型自动调整解说策略
@@ -321,6 +337,103 @@ end
 - [qwen3stream.py:21-81](file://qwen3stream.py#L21-L81)
 - [qwen-to-data7.py:1561-1643](file://qwen-to-data7.py#L1561-L1643)
 
+### 11. 视频-音频同步机制
+
+**新增功能**：基于时间戳的精确视频-音频同步机制：
+
+```mermaid
+sequenceDiagram
+participant Video as 视频播放器
+participant TTS as TTS合成器
+participant Sync as 同步控制器
+participant ZMQ as ZMQ事件源
+Video->>Sync : 请求开始播放
+ZMQ->>Sync : 发送事件(time_seconds)
+Sync->>TTS : 启动音频合成
+TTS->>Video : 同步音频输出
+Sync->>Video : 基于时间戳调整播放
+```
+
+**同步特性**：
+- **时间戳同步**：基于事件的time_seconds字段进行精确同步
+- **动态调整**：根据音频合成延迟动态调整视频播放
+- **误差补偿**：自动补偿音频合成和播放的微小差异
+- **多事件支持**：支持4事件批处理的同步处理
+
+**章节来源**
+- [qwen-to-data8.py:2020-2052](file://qwen-to-data8.py#L2020-L2052)
+
+### 12. 实时TTS回调机制
+
+**新增功能**：增强的实时TTS回调机制，支持事件类型追踪：
+
+```mermaid
+stateDiagram-v2
+[*] --> Connecting : 连接建立
+Connecting --> SessionReady : 会话初始化
+SessionReady --> Streaming : 开始流式合成
+Streaming --> Playing : 音频播放
+Playing --> WaitingFinish : 等待完成
+WaitingFinish --> Closed : 连接关闭
+[*] --> RecentTypes : 事件类型追踪
+RecentTypes --> Max40 : 限制40个事件
+Max40 --> Trimming : 自动修剪
+Trimming --> RecentTypes
+```
+
+**回调特性**：
+- **事件类型追踪**：记录最近40个事件类型，支持调试和监控
+- **实时音频处理**：边接收边播放，降低延迟
+- **错误恢复**：自动处理连接异常和超时情况
+- **性能监控**：记录首次音频延迟和会话ID
+
+**章节来源**
+- [qwen-to-data7.py:1180-1210](file://qwen-to-data7.py#L1180-L1210)
+
+### 13. ZMQ事件日志系统
+
+**新增功能**：完整的ZMQ事件日志系统，提供详细的事件跟踪和元数据记录：
+
+```mermaid
+flowchart TD
+subgraph "事件日志系统"
+A[ZMQ事件订阅] --> B[事件缓冲]
+B --> C[事件写入JSONL]
+C --> D[时间戳分类]
+D --> E[事件文件存储]
+end
+subgraph "日志文件格式"
+F[事件ID] --> F1[唯一标识]
+G[时间戳] --> G1[time_seconds字段]
+H[事件类型] --> H1[action/score]
+I[元数据] --> I1[player/team信息]
+end
+subgraph "日志分析"
+J[事件统计] --> J1[动作/得分计数]
+K[时间分布] --> K1[时间段分析]
+L[性能监控] --> L1[处理延迟跟踪]
+end
+E --> F
+E --> G
+E --> H
+E --> I
+J --> M[报告生成]
+K --> M
+L --> M
+```
+
+**日志文件特性**：
+- **时间戳分类**：按时间戳格式化存储事件
+- **元数据完整性**：记录事件ID、时间戳、类型和元数据
+- **多文件存储**：支持20个不同时间戳的事件文件
+- **实时写入**：事件到达时实时写入JSONL文件
+- **性能监控**：记录事件处理延迟和性能指标
+
+**章节来源**
+- [qwen-to-data7.py:1575-1594](file://qwen-to-data7.py#L1575-L1594)
+- [zmqserver.py:1-73](file://zmqserver.py#L1-L73)
+- [zmqtest.py:1-45](file://zmqtest.py#L1-L45)
+
 ## 架构概览
 
 ```mermaid
@@ -335,6 +448,8 @@ participant Monitor as 性能监控
 participant Threads as 双线程流水线
 participant Events as 事件处理
 participant LogSystem as 日志系统
+participant VideoSync as 视频同步
+participant ZMQEvents as ZMQ事件日志
 Client->>WebSocket : 建立WebSocket连接
 WebSocket->>Client : 发送ready状态
 Client->>WebSocket : 发送PCM音频数据
@@ -348,7 +463,9 @@ Threads->>TTS : 生成音频流
 TTS-->>Threads : 音频数据
 Threads-->>Audio : 实时播放音频
 Events->>Backend : 处理实时事件
-Events->>LogSystem : 记录事件处理指标
+Events->>VideoSync : 同步视频播放
+Events->>ZMQEvents : 记录事件日志
+ZMQEvents->>LogSystem : 事件跟踪指标
 LogSystem->>WebSocket : 广播日志消息
 WebSocket-->>Client : 发送性能报告
 ```
@@ -357,6 +474,7 @@ WebSocket-->>Client : 发送性能报告
 - [server.py:124-197](file://server.py#L124-L197)
 - [qwen3stream.py:109-156](file://qwen3stream.py#L109-L156)
 - [qwen-to-data7.py:1561-1643](file://qwen-to-data7.py#L1561-L1643)
+- [qwen-to-data8.py:2020-2052](file://qwen-to-data8.py#L2020-L2052)
 
 ## 详细组件分析
 
@@ -733,6 +851,8 @@ CheckKokoro2 --> |是| Kokoro2[后端: kokoro]
 | Kokoro本地 | ❌ 低 | 高 | 中等 | 本地部署场景 |
 | 双线程并行 | ✅ 高 | 高 | 高 | 高吞吐量实时场景 |
 | WebSocket日志 | ✅ 高 | 高 | 低 | 实时监控场景 |
+| 视频同步 | ✅ 高 | 高 | 中等 | 视频-音频同步场景 |
+| ZMQ事件日志 | ✅ 高 | 高 | 中等 | 事件跟踪监控场景 |
 
 #### 实时TTS回调处理
 
@@ -779,7 +899,7 @@ Closed --> [*]
 
 #### 事件类型支持
 
-**新增功能**：系统现已支持以下事件类型：
+**重要更新**：系统现已支持4事件批处理，显著提升了叙述准确性：
 
 - **动作事件（action）**：
   - `raise_hand`：抬手动作（代表发射能量球攻击）
@@ -867,7 +987,7 @@ GenerateNarration --> [*]
 
 | 参数名称 | 默认值 | 说明 |
 |---------|--------|------|
-| QWEN_EVENTS_BATCH | 10 | 每批事件数量 |
+| QWEN_EVENTS_BATCH | 4 | 每批事件数量（已从3增加到4） |
 | ZMQ_ENDPOINT | tcp://192.168.31.145:5557 | ZMQ服务地址 |
 | ZMQ_TOPIC | hado.event | 订阅主题 |
 
@@ -1032,6 +1152,161 @@ M --> F
 **章节来源**
 - [demo.html:248-685](file://demo.html#L248-L685)
 
+### 视频-音频同步组件
+
+#### 同步机制实现
+
+**新增功能**：基于时间戳的精确视频-音频同步机制：
+
+```mermaid
+sequenceDiagram
+participant Video as 视频播放器
+participant TTS as TTS合成器
+participant Sync as 同步控制器
+participant ZMQ as ZMQ事件源
+Video->>Sync : 请求开始播放
+ZMQ->>Sync : 发送事件(time_seconds)
+Sync->>TTS : 启动音频合成
+TTS->>Video : 同步音频输出
+Sync->>Video : 基于时间戳调整播放
+```
+
+**同步特性**：
+- **时间戳同步**：基于事件的time_seconds字段进行精确同步
+- **动态调整**：根据音频合成延迟动态调整视频播放
+- **误差补偿**：自动补偿音频合成和播放的微小差异
+- **多事件支持**：支持4事件批处理的同步处理
+
+**章节来源**
+- [qwen-to-data8.py:2020-2052](file://qwen-to-data8.py#L2020-L2052)
+
+#### 同步配置参数
+
+| 参数名称 | 默认值 | 说明 |
+|---------|--------|------|
+| VIDEO_START_OFFSET | 0.0秒 | 视频启动偏移量 |
+| AUDIO_SYNC_THRESHOLD | 0.1秒 | 音频同步阈值 |
+| MAX_SYNC_ADJUSTMENT | 1.0秒 | 最大同步调整量 |
+
+#### 同步处理流程
+
+**新增功能**：视频-音频同步的完整处理流程：
+
+1. **事件接收**：从ZMQ接收带有time_seconds的事件
+2. **时间戳提取**：解析事件中的time_seconds字段
+3. **视频启动**：根据时间戳启动视频播放
+4. **音频同步**：实时调整音频播放与视频同步
+5. **误差监控**：监控同步误差并进行自动补偿
+
+**章节来源**
+- [qwen-to-data8.py:2020-2052](file://qwen-to-data8.py#L2020-L2052)
+
+### ZMQ事件日志系统
+
+#### 实现原理
+
+**新增功能**：完整的ZMQ事件日志系统，提供详细的事件跟踪和元数据记录：
+
+```mermaid
+flowchart TD
+subgraph "事件日志系统"
+A[ZMQ事件订阅] --> B[事件缓冲]
+B --> C[事件写入JSONL]
+C --> D[时间戳分类]
+D --> E[事件文件存储]
+E --> F[多文件管理]
+end
+subgraph "日志文件格式"
+G[事件ID] --> G1[唯一标识]
+H[时间戳] --> H1[time_seconds字段]
+I[事件类型] --> I1[action/score]
+J[元数据] --> J1[player/team信息]
+K[创建时间] --> K1[created_at_ms]
+end
+subgraph "日志分析"
+L[事件统计] --> L1[动作/得分计数]
+M[时间分布] --> M1[时间段分析]
+N[性能监控] --> N1[处理延迟跟踪]
+O[文件管理] --> O1[20个时间戳文件]
+end
+F --> G
+F --> H
+F --> I
+F --> J
+F --> K
+L --> P[报告生成]
+M --> P
+N --> P
+O --> P
+```
+
+**日志文件特性**：
+- **时间戳分类**：按时间戳格式化存储事件
+- **元数据完整性**：记录事件ID、时间戳、类型和元数据
+- **多文件存储**：支持20个不同时间戳的事件文件
+- **实时写入**：事件到达时实时写入JSONL文件
+- **性能监控**：记录事件处理延迟和性能指标
+
+**章节来源**
+- [qwen-to-data7.py:1575-1594](file://qwen-to-data7.py#L1575-L1594)
+- [zmqserver.py:1-73](file://zmqserver.py#L1-L73)
+- [zmqtest.py:1-45](file://zmqtest.py#L1-L45)
+
+#### 日志文件格式
+
+**新增功能**：详细的事件日志文件格式：
+
+```json
+{
+  "schema_version": "1.0",
+  "event_id": "hado_video_01-action-192-blue_team",
+  "source": {
+    "id": "hado_video_01",
+    "video_path": "/Users/pikachu/Desktop/xlvideo/0505202600.mp4"
+  },
+  "event_type": "action",
+  "frame_index": 192,
+  "frame_number": 193,
+  "time_seconds": 8.0,
+  "time": "00:08.000",
+  "player": {
+    "username": "blue_team",
+    "team": "blue_team",
+    "team_label": "蓝方",
+    "track_id": 2,
+    "bbox": [1299, 630, 1450, 884]
+  },
+  "action": {
+    "type": "squat",
+    "label": "下蹲",
+    "confidence": 0.996,
+    "ke": 17.084,
+    "confidence_detail": {
+      "action": 0.996,
+      "person": 0.885,
+      "keypoints": 0.849
+    }
+  },
+  "created_at_ms": 1779270973481
+}
+```
+
+**章节来源**
+- [zmq_events.jsonl:1-69](file://zmq_events.jsonl#L1-L69)
+
+#### 日志文件管理
+
+**新增功能**：ZMQ事件日志文件的管理和分析：
+
+- **文件命名**：按时间戳格式命名，如`zmq_events_20260520_134352.jsonl`
+- **文件存储**：自动创建`zmq_events`目录存储日志文件
+- **文件轮转**：支持多个时间戳的文件轮转存储
+- **文件分析**：提供事件统计和性能分析工具
+
+**章节来源**
+- [zmq_events_20260520_134352.jsonl:1-20](file://zmq_events/zmq_events_20260520_134352.jsonl#L1-L20)
+- [zmq_events_20260520_185247.jsonl:1-20](file://zmq_events/zmq_events_20260520_185247.jsonl#L1-L20)
+
 ## 依赖关系分析
 
 ### 核心依赖关系
@@ -1050,70 +1325,70 @@ H[test_kokoro.py]
 I[zmqtest.py]
 J[zmq_events.jsonl]
 K[subtitle_player.html]
+L[qwen-to-data8.py]
+M[zmqserver.py]
+N[zmq_events/*.jsonl]
 end
 subgraph "音频处理库"
-L[dashscope]
-M[sounddevice]
-N[pydub]
-O[soundfile]
-P[pyzmq]
-Q[kokoro]
-R[websockets]
+O[dashscope]
+P[sounddevice]
+Q[pydub]
+R[soundfile]
+S[pyzmq]
+T[kokoro]
+U[websockets]
 end
 subgraph "AI模型"
-S[Qwen3-ASR]
-T[Qwen3-TTS]
-U[Qwen Flash]
-V[Kokoro TTS]
+V[Qwen3-ASR]
+W[Qwen3-TTS]
+X[Qwen Flash]
+Y[Kokoro TTS]
 end
 subgraph "基础库"
-W[FastAPI]
-X[Pydantic]
-Y[NumPy]
-Z[PyTorch]
-AA[python-dotenv]
-BB[threading]
-CC[queue]
-DD[zmq]
-EE[asyncio]
-FF[http.server]
-GG[webbrowser]
-HH[tempfile]
-II[shutil]
-JJ[subprocess]
-KK[urllib]
-LL[json]
-MM[time]
-NN[os]
-OO[pathlib]
-PP[re]
-QQ[base64]
-RR[uuid]
-SS[base64]
-TT[importlib]
-UU[typing]
-VV[collections.abc]
-WW[contextlib]
-XX[functools]
-YY[operator]
-ZZ[statistics]
-AAA[math]
-BBB[decimal]
-CCC[fractions]
-DDD[heapq]
-EEE[bisect]
-FFF[weakref]
-GGG[types]
-HHH[inspect]
-III[traceback]
-JJJ[sys]
-KKK[platform]
-LLL[locale]
-MMM[calendar]
-NNN[datetime]
-OOO[time]
-PPP[calendar]
-QQQ[datetime]
+Z[FastAPI]
+AA[Pydantic]
+BB[NumPy]
+CC[PyTorch]
+DD[python-dotenv]
+EE[threading]
+FF[queue]
+GG[zmq]
+HH[asyncio]
+II[http.server]
+JJ[webbrowser]
+KK[tempfile]
+LL[shutil]
+MM[subprocess]
+NN[urllib]
+OO[json]
+PP[time]
+QQ[os]
+RR[pathlib]
+SS[re]
+TT[base64]
+UU[uuid]
+VV[importlib]
+WW[typing]
+XX[collections.abc]
+YY[contextlib]
+ZZ[functools]
+AAA[operator]
+BBB[statistics]
+CCC[math]
+DDD[decimal]
+EEE[fractions]
+FFF[heapq]
+GGG[bisect]
+HHH[weakref]
+III[types]
+JJJ[inspect]
+KKK[traceback]
+LLL[sys]
+MMM[platform]
+NNN[locale]
+OOO[calendar]
+PPP[datetime]
+QQQ[time]
 RRR[zoneinfo]
 SSS[zoneinfo]
 TTT[zoneinfo]
@@ -1148,6 +1423,7 @@ ZZZ[zoneinfo]
 | websockets | 最新版本 | WebSocket服务 |
 | http.server | Python标准库 | HTTP静态文件服务 |
 | webbrowser | Python标准库 | 自动打开浏览器 |
+| ffmpeg | 最新版本 | 音频播放支持 |
 
 **章节来源**
 - [requirements.txt:1-13](file://requirements.txt#L1-L13)
@@ -1201,23 +1477,42 @@ ZZZ[zoneinfo]
 - **实时更新**：浏览器端实时显示最新日志
 - **内存管理**：避免日志消息的内存泄漏
 
-#### 7. 事件广播优化
+#### 7. 事件批处理优化
 
-**新增** 事件广播系统的性能优化：
+**重要更新**：4事件批处理显著提升叙述准确性：
 
-- **事件类型路由**：根据type字段快速分发事件
-- **线程安全广播**：使用run_coroutine_threadsafe确保安全
-- **客户端去重**：避免重复发送相同事件
-- **批量处理**：支持事件的批量处理和广播
+- **批处理大小优化**：4事件批处理提供更丰富的上下文
+- **事件类型追踪**：实时追踪最近40个事件类型
+- **性能监控增强**：详细的批处理性能指标
+- **错误处理优化**：改进的批处理错误恢复机制
 
-#### 8. 音频队列管理优化
+#### 8. 视频-音频同步优化
 
-**新增** 音频队列管理系统的性能优化：
+**新增** 视频-音频同步系统的性能优化：
 
-- **队列深度监控**：实时跟踪音频播放队列深度
-- **回执机制**：通过audio_done消息协调播放进度
-- **自动清理**：播放完成后自动清理队列
-- **错误恢复**：音频播放失败时的自动重试机制
+- **时间戳精确同步**：基于time_seconds字段的精确同步
+- **动态调整机制**：根据音频延迟动态调整视频播放
+- **误差补偿算法**：自动补偿同步误差
+- **多事件支持**：支持4事件批处理的同步处理
+
+#### 9. 实时TTS回调优化
+
+**新增** 实时TTS回调系统的性能优化：
+
+- **事件类型追踪**：限制40个事件的自动修剪机制
+- **内存优化**：避免事件类型列表无限增长
+- **性能监控**：详细的实时TTS性能指标
+- **错误恢复**：改进的回调错误处理机制
+
+#### 10. ZMQ事件日志系统优化
+
+**新增** ZMQ事件日志系统的性能优化：
+
+- **实时写入优化**：事件到达时实时写入JSONL文件
+- **多文件管理**：支持20个时间戳文件的高效管理
+- **内存优化**：避免大量事件数据的内存占用
+- **性能监控**：记录事件处理延迟和吞吐量
+- **文件轮转**：自动文件轮转避免单文件过大
 
 ### 性能调优参数
 
@@ -1228,21 +1523,27 @@ ZZZ[zoneinfo]
 | STREAM_SAMPLE_RATE | 音质平衡 | 16000-24000Hz |
 | blocksize | 实时性 | 1024-4096字节 |
 | QWEN_REALTIME_TTS_WAIT | 实时性 | 10-30秒 |
-| QWEN_EVENTS_BATCH | 吞吐量 | 5-20条 |
+| QWEN_EVENTS_BATCH | 叙述准确性 | 4条（已从3增加） |
 | KOKORO_SPEED | 合成速度 | 0.5-2.0倍 |
 | WS_PORT | 服务端口 | 8765 |
 | HTTP_PORT | HTTP端口 | WS_PORT + 1 |
 | 队列深度阈值 | 队列管理 | 1-3个批次 |
+| VIDEO_SYNC_THRESHOLD | 同步精度 | 0.1秒 |
+| MAX_SYNC_ADJUSTMENT | 同步范围 | 1.0秒 |
+| ZMQ_JSONL_LOG | 日志文件大小 | 100MB-1GB |
 
 ### 内存和CPU优化
 
 - **GPU加速**：优先使用CUDA设备进行AI推理
-- **批处理优化**：合理设置批处理大小
+- **批处理优化**：合理设置批处理大小（4事件批处理）
 - **资源监控**：实时监控系统资源使用情况
 - **后端选择优化**：根据硬件条件选择最优后端
 - **性能指标监控**：持续监控关键性能指标
 - **线程池管理**：合理配置线程数量和优先级
 - **WebSocket连接池**：优化WebSocket连接的管理
+- **事件类型追踪优化**：限制40个事件的内存使用
+- **ZMQ事件日志优化**：多文件轮转避免内存泄漏
+- **WebSocket日志优化**：异步广播减少主线程阻塞
 
 ## 故障排除指南
 
@@ -1368,6 +1669,42 @@ ZZZ[zoneinfo]
 - 分析违规类型识别准确性
 - 检查WebSocket日志
 
+#### 11. 视频-音频同步问题
+
+**问题现象**：视频和音频不同步
+
+**解决方案**：
+- 检查事件时间戳精度
+- 验证同步算法实现
+- 监控同步误差指标
+- 调整同步阈值参数
+- 检查音频延迟补偿
+- 分析事件批处理性能
+
+#### 12. 实时TTS回调问题
+
+**问题现象**：实时TTS回调异常或事件丢失
+
+**解决方案**：
+- 检查事件类型追踪机制
+- 验证回调函数实现
+- 监控事件类型列表长度
+- 检查内存使用情况
+- 分析回调性能指标
+- 验证WebSocket连接状态
+
+#### 13. ZMQ事件日志问题
+
+**问题现象**：事件日志丢失或格式错误
+
+**解决方案**：
+- 检查ZMQ连接状态
+- 验证事件格式合法性
+- 监控日志文件写入
+- 检查磁盘空间充足
+- 分析事件处理延迟
+- 验证时间戳格式正确性
+
 ### 调试技巧
 
 #### 1. 日志分析
@@ -1380,6 +1717,8 @@ ZZZ[zoneinfo]
 - **线程状态日志**：监控双线程的运行状态
 - **事件处理日志**：分析事件批处理的性能
 - **WebSocket日志**：实时日志广播和可视化监控
+- **视频同步日志**：监控视频-音频同步状态
+- **ZMQ事件日志**：分析事件跟踪和元数据
 
 #### 2. 性能监控
 
@@ -1390,6 +1729,9 @@ ZZZ[zoneinfo]
 - **HTTP往返时间**：跟踪API调用的响应时间
 - **队列深度**：监控播放队列积压情况
 - **WebSocket连接数**：监控活跃的WebSocket连接数
+- **事件批处理性能**：监控4事件批处理的性能指标
+- **ZMQ事件处理性能**：监控事件日志系统的性能
+- **日志文件大小**：监控日志文件的增长情况
 
 #### 3. 音频质量测试
 
@@ -1400,6 +1742,8 @@ ZZZ[zoneinfo]
 - **性能回归测试**：验证性能改进效果
 - **双线程性能测试**：验证并行处理效果
 - **WebSocket日志测试**：验证日志广播功能
+- **视频同步测试**：验证视频-音频同步精度
+- **ZMQ事件日志测试**：验证事件跟踪功能
 
 #### 4. 错误处理调试
 
@@ -1409,6 +1753,9 @@ ZZZ[zoneinfo]
 - **性能影响**：评估错误处理对整体性能的影响
 - **线程死锁检测**：检查双线程间的同步问题
 - **WebSocket连接测试**：验证连接的稳定性
+- **事件类型追踪测试**：验证事件类型列表管理
+- **视频同步测试**：验证同步算法的正确性
+- **ZMQ事件日志测试**：验证事件记录的完整性
 
 **章节来源**
 - [README.md:194-204](file://README.md#L194-L204)
@@ -1424,7 +1771,7 @@ ZZZ[zoneinfo]
 5. **灵活的架构设计**：模块化设计便于扩展和维护
 6. **完善的前端集成**：提供完整的Web界面和Vue3组件
 7. **自动文本修订**：具备政策违规自动检测和重写能力
-8. **事件批处理**：高效处理实时事件流
+8. **事件批处理**：高效处理实时事件流，现已支持4事件批处理
 9. **全面的性能监控**：详细的性能计时测量和HTTP往返时间跟踪
 10. **强大的错误处理**：完善的错误恢复机制和超时处理
 11. **实时性能优化**：智能的性能调优和资源管理
@@ -1432,12 +1779,15 @@ ZZZ[zoneinfo]
 13. **WebSocket日志系统**：实时日志广播和可视化监控
 14. **增强事件广播**：多类型事件的实时传输和处理
 15. **浏览器音频播放**：通过WebSocket实现远程音频播放协调
+16. **视频-音频同步**：基于时间戳的精确同步机制
+17. **实时TTS回调追踪**：事件类型追踪和性能监控
+18. **ZMQ事件日志系统**：新增的详细事件跟踪和元数据记录系统
 
 **重要更新**：双线程并行流水线架构的引入，使得系统能够同时处理多个批次的音频合成任务，显著提升了整体吞吐量和响应性能。虽然原本计划的三线程架构（gen/tts/play）已被移除，但当前的双线程架构仍然能够有效处理实时语音应用场景，适用于生产环境的严格要求。
 
-**新增功能**：增强事件批处理系统现已支持复杂的多团队运动场景，包括动作事件（raise_hand、squat、raise_hand+squat组合）和得分事件的智能识别和处理，为体育赛事解说提供了更丰富的事件支持。WebSocket日志系统的引入为实时TTS系统提供了强大的可视化监控能力，包括实时日志广播、事件类型支持、音频队列深度监控等功能。自动文本修订功能的增强进一步提升了系统的合规性和自动化水平。
+**新增功能**：增强事件批处理系统现已支持4事件批处理，显著提升了叙述准确性，包括动作事件（raise_hand、squat、raise_hand+squat组合）和得分事件的智能识别和处理，为体育赛事解说提供了更丰富的事件支持。WebSocket日志系统的引入为实时TTS系统提供了强大的可视化监控能力，包括实时日志广播、事件类型支持、音频队列深度监控等功能。自动文本修订功能的增强进一步提升了系统的合规性和自动化水平。视频-音频同步机制的增强确保了音频与视频的精确配合，基于时间戳的同步算法提供了更高的精度和可靠性。ZMQ事件日志系统的新增为系统监控和调试提供了强大支持，包含详细的事件跟踪、元数据记录和性能监控功能。
 
-项目的核心优势在于其实时性和高质量的音频处理能力，以及智能的多后端支持、自动纠错机制、全面的性能监控、强大的错误处理能力、WebSocket日志系统和增强事件广播功能，适用于各种实时语音应用场景。通过合理的性能调优和错误处理机制，可以满足生产环境的严格要求。
+项目的核心优势在于其实时性和高质量的音频处理能力，以及智能的多后端支持、自动纠错机制、全面的性能监控、强大的错误处理能力、WebSocket日志系统、增强事件广播功能、视频-音频同步机制、实时TTS回调追踪和ZMQ事件日志系统，适用于各种实时语音应用场景。通过合理的性能调优和错误处理机制，可以满足生产环境的严格要求。
 
 ## 附录
 
@@ -1564,7 +1914,7 @@ THREAD_POOL_SIZE=4
 QUEUE_DEPTH_THRESHOLD=3
 
 # 事件处理配置
-QWEN_EVENTS_BATCH=10
+QWEN_EVENTS_BATCH=4
 ZMQ_ENDPOINT=tcp://localhost:5557
 ZMQ_TOPIC=hado.event
 
@@ -1572,6 +1922,13 @@ ZMQ_TOPIC=hado.event
 WS_PORT=8765
 HTTP_PORT=8766
 AUTO_OPEN_BROWSER=true
+
+# 视频同步配置
+VIDEO_SYNC_THRESHOLD=0.1
+MAX_SYNC_ADJUSTMENT=1.0
+
+# ZMQ事件日志配置
+ZMQ_JSONL_LOG=zmq_events/zmq_events_20260520_185247.jsonl
 ```
 
 #### 2. 音色配置
@@ -1635,7 +1992,7 @@ AUTO_OPEN_BROWSER=true
 | 参数 | 类型 | 默认值 | 描述 |
 |------|------|--------|------|
 | `--input` | Path | None | 输入JSONL文件路径 |
-| `--batch-size` | int | 10 | 每批事件数量 |
+| `--batch-size` | int | 4 | 每批事件数量（已从3增加到4） |
 | `--tts-backend` | str | auto | TTS后端选择 |
 | `--voice` | str | Ethan | TTS音色 |
 | `--tts-instruction` | str | 比赛解说语气 | 实时TTS指令 |
@@ -1648,6 +2005,9 @@ AUTO_OPEN_BROWSER=true
 | `--zmq-topic` | str | hado.event | ZMQ订阅主题 |
 | `--ws-port` | int | 8765 | 字幕WebSocket端口 |
 | `--http-port` | int | 8766 | 字幕HTTP端口 |
+| `--video-sync-threshold` | float | 0.1 | 视频同步阈值 |
+| `--max-sync-adjustment` | float | 1.0 | 最大同步调整量 |
+| `--zmq-jsonl-log` | Path | 自动生成 | ZMQ事件日志文件路径 |
 
 ### 性能监控参考
 
@@ -1667,6 +2027,12 @@ AUTO_OPEN_BROWSER=true
 | event_count | int | 处理事件数量 | > 0 |
 | ws_client_count | int | WebSocket客户端数量 | >= 0 |
 | log_broadcast_count | int | 日志广播次数 | >= 0 |
+| video_sync_error | float | 视频同步误差（秒） | < 0.1s |
+| recent_event_types | list | 最近事件类型列表 | <= 40个 |
+| zmq_event_count | int | ZMQ事件数量 | > 0 |
+| log_file_size_mb | float | 日志文件大小（MB） | < 1000MB |
+| memory_usage_mb | float | 内存使用量（MB） | < 4000MB |
+| cpu_usage_percent | float | CPU使用率（%） | < 80% |
 
 #### 2. 错误类型
 
@@ -1686,6 +2052,10 @@ AUTO_OPEN_BROWSER=true
 | AudioQueueDepthError | 音频队列深度错误 | 检查队列管理，重置深度计数 |
 | PolicyViolationError | 政策违规错误 | 启动自动重写机制，检查违规类型 |
 | RevisionFailedError | 重写失败错误 | 记录重写错误，回退到原始文本 |
+| VideoSyncError | 视频同步错误 | 调整同步参数，重新计算误差 |
+| RealtimeTTSRecentsError | 实时TTS事件追踪错误 | 检查事件类型列表，清理内存 |
+| ZMQEventLogError | ZMQ事件日志错误 | 检查日志写入，重新建立连接 |
+| LogFileTooLargeError | 日志文件过大错误 | 清理旧日志，启动文件轮转 |
 
 #### 3. 双线程监控指标
 
@@ -1704,3 +2074,8 @@ AUTO_OPEN_BROWSER=true
 | audio_queue_depth_avg | float | 音频队列深度平均值 | 队列统计监控 |
 | policy_violation_rate | float | 政策违规检测率 | 违规统计监控 |
 | revision_success_rate | float | 自动重写成功率 | 重写统计监控 |
+| video_sync_accuracy | float | 视频同步准确率 | 同步误差统计 |
+| realtime_tts_callback_rate | float | 实时TTS回调速率（事件/秒） | 回调统计监控 |
+| zmq_event_write_rate | float | ZMQ事件写入速率（事件/秒） | 事件统计监控 |
+| log_file_rotation_count | int | 日志文件轮转次数 | 文件管理监控 |
+| websocket_client_count | int | WebSocket客户端数量 | 连接状态监控 |
