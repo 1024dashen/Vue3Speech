@@ -16,6 +16,8 @@
 - [zmq_events_20260520_135655.jsonl](file://zmq_events_20260520_135655.jsonl)
 - [zmq_events_20260520_164508.jsonl](file://zmq_events_20260520_164508.jsonl)
 - [zmq_events_20260520_173731.jsonl](file://zmq_events_20260520_173731.jsonl)
+- [zmq_events_20260521_145210.jsonl](file://zmq_events_20260521_145210.jsonl)
+- [zmq_events_20260520_185247.jsonl](file://zmq_events_20260520_185247.jsonl)
 - [zmqserver.py](file://zmqserver.py)
 - [zmqtest.py](file://zmqtest.py)
 - [zmqcli.py](file://zmqcli.py)
@@ -707,11 +709,8 @@ Wait --> PublishLoop
 - **zmq_events_20260520_135655.jsonl**：包含早期和中期的比赛数据
 - **zmq_events_20260520_164508.jsonl**：包含后期的精彩瞬间
 - **zmq_events_20260520_173731.jsonl**：包含比赛结束后的统计数据
-- **zmq_events_20260520_174634.jsonl**：包含完整的比赛数据集
-- **zmq_events_20260520_175350.jsonl**：包含比赛中间阶段的数据
-- **zmq_events_20260520_175932.jsonl**：包含比赛后期的数据
-- **zmq_events_20260520_180454.jsonl**：包含比赛最后阶段的数据
-- **zmq_events_20260520_180843.jsonl**：包含比赛结束后的数据
+- **zmq_events_20260521_145210.jsonl**：包含完整的比赛数据集
+- **zmq_events_20260520_185247.jsonl**：包含比赛中间阶段的数据
 
 这些文件支持更丰富的事件类型，包括：
 - **动作事件**：下蹲、抬手、抬手+下蹲等动作类型
@@ -726,6 +725,9 @@ Wait --> PublishLoop
 - [zmqtest.py:5-46](file://zmqtest.py#L5-L46)
 - [zmq_events.jsonl:1-69](file://zmq_events.jsonl#L1-L69)
 - [zmq_events_20260520_134352.jsonl:1-150](file://zmq_events_20260520_134352.jsonl#L1-L150)
+- [zmq_events_20260520_173731.jsonl:1-56](file://zmq_events_20260520_173731.jsonl#L1-L56)
+- [zmq_events_20260521_145210.jsonl:1-67](file://zmq_events_20260521_145210.jsonl#L1-L67)
+- [zmq_events_20260520_185247.jsonl:1-15](file://zmq_events_20260520_185247.jsonl#L1-L15)
 
 ## ZMQ服务器增强
 
@@ -1244,7 +1246,7 @@ stateDiagram-v2
 7. **事件流优化**：合理配置事件发布的间隔，避免内存过度占用
 8. **--once参数优化**：在单次播放模式下避免重复内存分配
 9. **多时间戳文件管理**：优化多个事件文件的内存使用和切换
-10. **视频同步优化**：优化视频播放器的内存使用和时间同步性能
+10. **视频同步优化**：通过time_seconds字段实现精确的时间同步，减少播放延迟
 11. **事件日志优化**：实现事件日志的异步写入和内存重用
 12. **统计分析优化**：实现事件统计的增量更新和内存优化
 13. **性能监控优化**：实现性能监控的高效数据收集和存储
@@ -1255,7 +1257,7 @@ stateDiagram-v2
 2. **窗口大小配置**：通过`ASR_WS_MAX_WINDOW_S`平衡实时性和准确性
 3. **批量处理**：减少不必要的ASR调用次数
 4. **事件发布间隔**：通过`--interval`参数控制事件发布的频率
-5. **音频队列预加载**：提前加载下一个音频片段，减少播放延迟
+5. **音频队列预加载**：提前加载下一个音频片段，减少播放等待时间
 6. **字幕同步优化**：精确计算字幕显示时长，避免延迟累积
 7. **ZMQ事件流优化**：合理配置事件发布的间隔，避免网络拥塞
 8. **--once模式优化**：在单次播放模式下优化内存使用
