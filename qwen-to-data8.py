@@ -71,6 +71,8 @@ _ws_loop: _asyncio.AbstractEventLoop | None = None
 # 导出记录：每条为 {"wav": "/abs/path.wav", "text": "解说文本", "batch_index": N}
 _export_records: list[dict] = []
 _export_lock = threading.Lock()
+# 首条 ZMQ 事件的 time_seconds，导出时音频/字幕从该时刻开始
+_first_event_time_sec: float = 0.0
 
 
 def _export_add(wav_path: str, text: str, batch_index: int) -> None:
@@ -149,7 +151,8 @@ def _do_export() -> dict:
 
         srt_lines = []
         concat_lines = []  # ffmpeg concat 列表
-        cursor = 0.0  # 当前时间游标（秒）
+        audio_start_sec = _first_event_time_sec  # 解说音频从视频第几秒开始（与页面播放一致）
+        cursor = audio_start_sec  # 当前时间游标（秒）
 
         # 计算每段时长
         durations = []
@@ -213,14 +216,22 @@ def _do_export() -> dict:
         # 若 libass 不可用则回退到无字幕版本
         srt_path_str = str(srt_path).replace("\\", "/").replace(":", "\\:")
 
+        # adelay 滤镜：在音频前填充静音，使解说从 audio_start_sec 秒才开始（比 -itsoffset 更可靠）
+        adelay_ms = int(audio_start_sec * 1000)
+        adelay_filter = f"adelay={adelay_ms}|{adelay_ms}" if audio_start_sec > 0 else ""
+
         def _run_ffmpeg_with_subs() -> _subprocess.CompletedProcess:
-            return _subprocess.run([
+            cmd = [
                 ffmpeg_bin, "-y",
                 "-i", str(video_src),
                 "-i", str(merged_wav),
                 "-map", "0:v:0",
                 "-map", "1:a:0",
                 "-vf", f"subtitles='{srt_path_str}':force_style='FontSize=28,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=2,Bold=1'",
+            ]
+            if adelay_filter:
+                cmd += ["-af", adelay_filter]
+            cmd += [
                 "-c:v", "libx264",
                 "-preset", "fast",
                 "-crf", "23",
@@ -228,15 +239,20 @@ def _do_export() -> dict:
                 "-b:a", "128k",
                 "-shortest",
                 str(out_path),
-            ], capture_output=True)
+            ]
+            return _subprocess.run(cmd, capture_output=True)
 
         def _run_ffmpeg_no_subs() -> _subprocess.CompletedProcess:
-            return _subprocess.run([
+            cmd = [
                 ffmpeg_bin, "-y",
                 "-i", str(video_src),
                 "-i", str(merged_wav),
                 "-map", "0:v:0",
                 "-map", "1:a:0",
+            ]
+            if adelay_filter:
+                cmd += ["-af", adelay_filter]
+            cmd += [
                 "-c:v", "libx264",
                 "-preset", "fast",
                 "-crf", "23",
@@ -244,7 +260,8 @@ def _do_export() -> dict:
                 "-b:a", "128k",
                 "-shortest",
                 str(out_path),
-            ], capture_output=True)
+            ]
+            return _subprocess.run(cmd, capture_output=True)
 
         ret2 = _run_ffmpeg_with_subs()
         if ret2.returncode != 0:
@@ -2040,16 +2057,19 @@ def main() -> None:
                     flush=True,
                 )
 
-                # 收到第一条消息时，从其 time_seconds 开始播放视频
+                # 收到第一条消息时，记录 time_seconds 并从该位置开始播放视频
                 if not first_message_received:
                     first_message_received = True
+                    ts = event.get("time_seconds")
+                    try:
+                        start_sec = float(ts) if ts is not None else 0.0
+                    except (ValueError, TypeError):
+                        start_sec = 0.0
+                    # 记录首条事件时间，供导出时使用
+                    global _first_event_time_sec
+                    _first_event_time_sec = start_sec
                     video_path = args.video
                     if video_path:
-                        ts = event.get("time_seconds")
-                        try:
-                            start_sec = float(ts) if ts is not None else 0.0
-                        except (ValueError, TypeError):
-                            start_sec = 0.0
                         video_proc = _start_video_at(video_path, start_sec)
 
                 zmq_log_fp.write(json.dumps(event, ensure_ascii=False) + "\n")
